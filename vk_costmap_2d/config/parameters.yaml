@@ -1,0 +1,46 @@
+global_frame: "map"
+base_frame: "base_link"
+rolling_window: true
+publish_rate: 10.0
+width:  5.0
+height: 5.0
+resolution: 0.02
+robot_radius: 0.5
+footprint_padding_X: 0.6
+footprint_padding_Y: 0.0
+
+costmap/obstacle_layer:
+  observation_sources: "scan1 scan2"
+  scan1:
+    topic: "scan1"
+    data_type: LaserScan
+    sensor_frame: "lidar_front"
+    expected_update_rate: 0.4
+    observation_keep_time: 0.0
+    marking: true
+    clearing: true
+    max_obstacle_height: 1.0
+    min_obstacle_height: -0.05
+  scan2:
+    topic: "scan2"
+    data_type: LaserScan
+    sensor_frame: "lidar_back"
+    expected_update_rate: 0.4
+    observation_keep_time: 0.0
+    marking: true
+    clearing: true
+    max_obstacle_height: 1.0
+    min_obstacle_height: -0.05
+
+costmap/inflation_layer:
+  weight: 1.0
+
+unpadded_footprint:
+  - x: 0.331
+    y: 0.297
+  - x: 0.331
+    y: -0.297
+  - x: -0.331
+    y: -0.297
+  - x: -0.331
+    y: 0.297
