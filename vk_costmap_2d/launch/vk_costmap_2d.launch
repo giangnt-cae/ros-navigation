@@ -1,0 +1,7 @@
+<launch>
+  <node pkg="vk_costmap_2d" type="vk_costmap_2d" name="vk_costmap_2d" output="screen">
+    <rosparam file="$(find vk_costmap_2d)/config/parameters.yaml" command="load"/>
+  </node>
+
+  <node pkg="vk_costmap_2d" type="test_node" name="test_node" output="screen"/>
+</launch>
