@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<launch>
+	<node name= "rviz" pkg= "rviz" type= "rviz" args="-d $(find vk_slam_3d)/vk_slam_3d.rviz"/>
+	<node name="vk_slam_3d" pkg="vk_slam_3d" type="vk_slam_3d" output="screen"/>
+</launch>
