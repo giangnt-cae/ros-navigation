@@ -222,3 +222,28 @@ void QuinticBezierSpline::getState(double& x, double& y, double& theta, double u
     y = q[1];
     theta = atan2(q_dot[1], q_dot[0]);
 }
+
+void QuinticBezierSpline::getState(double (&x)[5], double u, double u_dot, int index_segment) {
+    double u2 = u * u;
+    double u3 = u2 * u;
+    double u4 = u3 * u;
+    double u5 = u4 * u;
+    std::array<Eigen::Vector2d, 6> coefficients = segments_[index_segment];
+    Eigen::Vector2d q = coefficients[0] + coefficients[1] * u + coefficients[2] * u2 + coefficients[3] * u3
+                            + coefficients[4] * u4 + coefficients[5] * u5;
+    
+    Eigen::Vector2d q_dot = coefficients[1] + 2 * u * coefficients[2] + 3 * u2 * coefficients[3]
+                            + 4 * u3 * coefficients[4] + 5 * u4 * coefficients[5];
+
+    Eigen::Vector2d q_2dot = 2 * coefficients[2] + 6 * u * coefficients[3]
+                            + 12 * u2 * coefficients[4] + 20 * u3 * coefficients[5];
+    double numerator = fabs(q_dot[0] * q_2dot[1] - q_dot[1] * q_2dot[0]);
+    double denominator = pow(q_dot.norm(), 3);
+    double c = (denominator > 1e-8) ? (numerator / denominator) : 0.0;
+    
+    x[0] = q[0];
+    x[1] = q[1];
+    x[2] = atan2(q_dot[1], q_dot[0]);
+    x[3] = q_dot.norm() * u_dot;
+    x[4] = x[3] * c;
+}

@@ -20,8 +20,11 @@ class Trajectory {
 
         void pathCallback(const nav_msgs::PathConstPtr& msg);
 
-        // Reference pose at time t
+        // Reference pose at time t (x, y, theta)
         void getPose(geometry_msgs::Pose& pose, double t);
+
+        // Reference state at time t (x, y, theta, v, w)
+        void getPoseAndVelocity(double (&x)[5], double t);
 
         ros::NodeHandle private_nh_, nh_;
         ros::Publisher traj_pub_;

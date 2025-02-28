@@ -89,20 +89,10 @@ void Trajectory::pathCallback(const nav_msgs::PathConstPtr& msg) {
 void Trajectory::getPose(geometry_msgs::Pose& pose, double t) {
     std::vector<RefPoint>* uts = vel_profile_->getVelocityProfile();
     double x, y, theta;
-    if(t >= uts->back().t) {
-        spline_->getState(x, y, theta, uts->back().u, uts->back().index);
-        pose.position.x = x;
-        pose.position.y = y;
-        pose.orientation = tf::createQuaternionMsgFromYaw(theta);
-        return;
-    }
-    if(t < uts->front().t) {
-        spline_->getState(x, y, theta, uts->front().u, uts->front().index);
-        pose.position.x = x;
-        pose.position.y = y;
-        pose.orientation = tf::createQuaternionMsgFromYaw(theta);
-        return;
-    }
+    if(t > uts->back().t)
+        t = uts->back().t;
+    else if(t < uts->front().t)
+        t = uts->front().t;
 
     int left = 0, right = vel_profile_->getNumOfPoints();
     while(left < right) {
@@ -113,6 +103,8 @@ void Trajectory::getPose(geometry_msgs::Pose& pose, double t) {
             left = mid + 1;
         }
     }
+    if(left == vel_profile_->getNumOfPoints())
+        left -= 1;
 
     // Noi suy t trong khoang [ti, tj]
     double ui = (*uts)[left - 1].u, uj = (*uts)[left].u;
@@ -126,7 +118,7 @@ void Trajectory::getPose(geometry_msgs::Pose& pose, double t) {
         if(t <= t0) {
             u = ui + (t - ti) * (1 - ui) / (t0 - ti);
         }else {
-            u = 0 + (t - t0) * (uj - 0) / (tj - t0);
+            u = (t - t0) * (uj) / (tj - t0);
             k = (*uts)[left].index;
         }
     }
@@ -134,6 +126,48 @@ void Trajectory::getPose(geometry_msgs::Pose& pose, double t) {
     pose.position.x = x;
     pose.position.y = y;
     pose.orientation = tf::createQuaternionMsgFromYaw(theta);
+}
+
+void Trajectory::getPoseAndVelocity(double (&x)[5], double t) {
+    std::vector<RefPoint>* uts = vel_profile_->getVelocityProfile();
+    if(t > uts->back().t)
+        t = uts->back().t;
+    else if(t < uts->front().t)
+        t = uts->front().t;
+
+    int left = 0, right = vel_profile_->getNumOfPoints();
+    while(left < right) {
+        int mid = left + (right - left) / 2;
+        if((*uts)[mid].t > t) {
+            right = mid;
+        }else {
+            left = mid + 1;
+        }
+    }
+    if(left == vel_profile_->getNumOfPoints())
+        left -= 1;
+
+    // Noi suy t trong khoang [ti, tj]
+    double ui = (*uts)[left - 1].u, uj = (*uts)[left].u;
+    double ti = (*uts)[left - 1].t, tj = (*uts)[left].t;
+    unsigned int k = (*uts)[left -1].index;
+    
+    double u, u_dot;
+    if(uj > ui) {
+        u = ui + (t - ti) * (uj - ui) / (tj - ti);
+        u_dot = (uj - ui) / (tj - ti);
+    }else {
+        double t0 = ti + (tj - ti) * (1 - ui) / (1 - ui + uj);
+        if(t <= t0) {
+            u = ui + (t - ti) * (1 - ui) / (t0 - ti);
+            u_dot = (1 - ui) / (t0 - ti);
+        }else {
+            u = (t - t0) * (uj) / (tj - t0);
+            u_dot = uj/ (tj - t0);
+            k = (*uts)[left].index;
+        }
+    }
+    spline_->getState(x, u, u_dot, k);
 }
 
 int main(int argc, char **argv) {

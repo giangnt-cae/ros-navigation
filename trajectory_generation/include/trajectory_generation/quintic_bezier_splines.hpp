@@ -36,6 +36,7 @@ class QuinticBezierSpline {
         double computeArcLength(double lower_limit, double upper_limit, int index_segment);
         double getCurvatureAtU(double u, int index_segment);
         void getState(double& x, double& y, double& theta, double u, int index_segment);
+        void getState(double (&x)[5], double u, double u_dot, int index_segment);
     
     private:
         std::vector<Eigen::Vector2d> waypoints_;                    // Waypoints from path planner
