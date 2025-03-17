@@ -31,7 +31,12 @@ struct Costmap2D {
 
 template <typename Point1, typename Point2>  
 inline double norm2d(const Point1& pt1, const Point2& pt2) {
-    return std::sqrt( std::pow(pt2.x - pt1.x, 2) + std::pow(pt2.y - pt1.y, 2)  );
+    return std::sqrt(std::pow(pt2.x - pt1.x, 2) + std::pow(pt2.y - pt1.y, 2));
+}
+
+template <typename Point1, typename Point2>  
+inline bool isApprox2d(const Point1& pt1, const Point2& pt2, double threshold) {
+  return ( std::abs(pt2.x-pt1.x)<threshold && std::abs(pt2.y-pt1.y)<threshold );
 }
 
 template <typename Point, typename LinePoint>
@@ -56,6 +61,11 @@ inline double computeSquaredDistanceToLineSegment(const Point& point, const Line
         return std::pow(point.x-line_end.x, 2) + std::pow(point.y-line_end.y, 2);
     
     return std::pow(point.x - (line_start.x + u*dx) ,2) + std::pow(point.y - (line_start.y + u*dy),2);
+}
+
+template <typename Point, typename LinePoint>
+inline double computeDistanceToLineSegment(const Point& point, const LinePoint& line_start, const LinePoint& line_end, bool* is_inbetween=NULL) {
+  return std::sqrt(computeSquaredDistanceToLineSegment(point, line_start, line_end, is_inbetween));
 }
 
 std::vector<geometry_msgs::Point32> douglasPeucker(std::vector<geometry_msgs::Point32>::iterator begin,
@@ -97,6 +107,16 @@ class ConvertToPolygonDBSConcaveHull {
             return (long double)(A.x - O.x) * (long double)(B.y - O.y) - (long double)(A.y - O.y) * (long double)(B.x - O.x);
         }
 
+
+        template <typename PointLine, typename PointCluster, typename PointHull>
+        std::size_t findNearestInnerPoint(PointLine line_start, PointLine line_end, const std::vector<PointCluster>& cluster, const std::vector<PointHull>& hull, bool* found);
+        
+        template <typename Point1, typename Point2, typename Point3, typename Point4>
+        bool checkLineIntersection(const Point1& line1_start, const Point2& line1_end, const Point3& line2_start, const Point4& line2_end);
+    
+        template <typename PointHull, typename Point1, typename Point2, typename Point3, typename Point4>
+        bool checkLineIntersection(const std::vector<PointHull>& hull, const Point1& current_line_start, 
+                               const Point2& current_line_end, const Point3& test_line_start, const Point4& test_line_end);
         
     private:
         double cluster_max_distance_;           // maximum distance to neighbors [m]
@@ -124,6 +144,8 @@ class ConvertToPolygonDBSConcaveHull {
         // Monotone Chain Algorithm (Andrew’s Algorithm)
         void convexHull(std::vector<KeyPoint>& cluster, geometry_msgs::Polygon& polygon);
 
+        void concaveHull(std::vector<KeyPoint>& cluster, double depth, geometry_msgs::Polygon& polygon);
+
         void simplifyPolygon(geometry_msgs::Polygon& polygon);
 
         void updateObstacles();
@@ -137,5 +159,66 @@ class ConvertToPolygonDBSConcaveHull {
 
 
 };  // ConvertToPolygonDBSConcaveHull
+
+
+template <typename PointLine, typename PointCluster, typename PointHull>
+std::size_t ConvertToPolygonDBSConcaveHull::findNearestInnerPoint(PointLine line_start, PointLine line_end, const std::vector<PointCluster>& cluster, const std::vector<PointHull>& hull, bool* found) {
+    std::size_t nearsest_idx = 0;
+    double distance = 0;
+    *found = false;
+
+    for (std::size_t i = 0; i < cluster.size(); ++i) {
+        // Skip points that are already in the hull
+        if (std::find_if( hull.begin(), hull.end(), boost::bind(isApprox2d<PointHull, PointCluster>, _1, boost::cref(cluster[i]), 1e-5) ) != hull.end() )
+            continue;
+
+        double dist = computeDistanceToLineSegment(cluster[i], line_start, line_end);
+        bool skip = false;
+        for (int j = 0; !skip && j < (int)hull.size() - 1; ++j) {
+            double dist_temp = computeDistanceToLineSegment(cluster[i], hull[j], hull[j + 1]);
+            skip |= dist_temp < dist;
+        }
+        if (skip) 
+            continue;
+
+        if (!(*found) || dist < distance) {
+            nearsest_idx = i;
+            distance = dist;
+            *found = true;
+        }
+    }
+    return nearsest_idx;
+}
+
+template <typename Point1, typename Point2, typename Point3, typename Point4>
+bool ConvertToPolygonDBSConcaveHull::checkLineIntersection(const Point1& line1_start, const Point2& line1_end, const Point3& line2_start, const Point4& line2_end)
+{
+    double dx1 = line1_end.x - line1_start.x;
+    double dy1 = line1_end.y - line1_start.y;
+    double dx2 = line2_end.x - line2_start.x;
+    double dy2 = line2_end.y - line2_start.y;
+    double s = (-dy1 * (line1_start.x - line2_start.x) + dx1 * (line1_start.y - line2_start.y)) / (-dx2 * dy1 + dx1 * dy2);
+    double t = ( dx2 * (line1_start.y - line2_start.y) - dy2 * (line1_start.x - line2_start.x)) / (-dx2 * dy1 + dx1 * dy2);
+    return (s > 0 && s < 1 && t > 0 && t < 1);
+}
+
+template <typename PointHull, typename Point1, typename Point2, typename Point3, typename Point4>
+bool ConvertToPolygonDBSConcaveHull::checkLineIntersection(const std::vector<PointHull>& hull, const Point1& current_line_start, 
+                                                            const Point2& current_line_end, const Point3& test_line_start, const Point4& test_line_end)
+{
+    for (int i = 0; i < (int)hull.size() - 2; i++) 
+    {
+        if (isApprox2d(current_line_start, hull[i], 1e-5) && isApprox2d(current_line_end, hull[i+1], 1e-5))
+        {
+            continue;
+        }
+
+        if (checkLineIntersection(test_line_start, test_line_end, hull[i], hull[i+1])) 
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
 }   // convert_polygon namespace

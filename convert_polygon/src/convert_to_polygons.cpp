@@ -11,11 +11,12 @@ ConvertToPolygonDBSConcaveHull::ConvertToPolygonDBSConcaveHull() {
 
 void ConvertToPolygonDBSConcaveHull::init() {
     costmap_ = NULL;
-    nh_.param("cluster_max_distance", cluster_max_distance_, 0.1);
+    nh_.param("cluster_max_distance", cluster_max_distance_, 0.5);
     nh_.param("cluster_min_pts", cluster_min_pts_, 3);
     nh_.param("cluster_max_pts_", cluster_max_pts_, 30);
-    nh_.param("convex_hull_min_pt_separation", convex_hull_min_pt_separation_, 0.0);
+    nh_.param("convex_hull_min_pt_separation", convex_hull_min_pt_separation_, 0.05);
     nh_.param("global_frame", global_frame_, std::string("map"));
+    nh_.param("concave_hull_depth", concave_hull_depth_, 2.0);
 
     local_map_sub_ = nh_.subscribe("vk_costmap_2d/costmap", 5, &ConvertToPolygonDBSConcaveHull::mapCallback, this);
 
@@ -163,7 +164,7 @@ void ConvertToPolygonDBSConcaveHull::updateObstacles() {
     geometry_msgs::Point point;
     geometry_msgs::Polygon polygon;
     marker.id = 0;
-    clusters.erase(clusters.begin());
+    clusters.erase(clusters.begin());       // First cluster is only noises
     for(auto& cluster : clusters) {
         if((int)cluster.size() < 2)
             continue;
@@ -171,6 +172,8 @@ void ConvertToPolygonDBSConcaveHull::updateObstacles() {
         marker.points.clear();
     
         convexHull(cluster, polygon);       // Closed polygon
+
+        // concaveHull(cluster, concave_hull_depth_, polygon);
         
         obstacle.polygon = polygon;
         computeCentroidAndRadius(polygon, obstacle.centroid, obstacle.radius);
@@ -286,6 +289,43 @@ void ConvertToPolygonDBSConcaveHull::convexHull(std::vector<KeyPoint>& cluster, 
     simplifyPolygon(polygon);
 }
 
+void ConvertToPolygonDBSConcaveHull::concaveHull(std::vector<KeyPoint>& cluster, double depth, geometry_msgs::Polygon& polygon) {
+    convexHull(cluster, polygon);
+
+    std::vector<geometry_msgs::Point32>& concave_list = polygon.points;
+
+    for (int i = 0; i < (int)concave_list.size() - 1; ++i) {
+        // find nearest inner point pk from line (vertex1 -> vertex2)
+        const geometry_msgs::Point32& vertex1 = concave_list[i];
+        const geometry_msgs::Point32& vertex2 = concave_list[i+1];
+
+        bool found;
+        size_t nearest_idx = findNearestInnerPoint(vertex1, vertex2, cluster, concave_list, &found);
+        if (!found) 
+          continue;  
+        
+        double line_length = norm2d(vertex1, vertex2);
+                
+        double dst1 = norm2d(cluster[nearest_idx], vertex1);
+        double dst2 = norm2d(cluster[nearest_idx], vertex2);
+        double dd = std::min(dst1, dst2);
+        if (dd<1e-8)
+          continue;
+
+        if (line_length / dd > depth) {
+            // Check that new candidate edge will not intersect existing edges.
+            bool intersects = checkLineIntersection(concave_list, vertex1, vertex2, vertex1, cluster[nearest_idx]);
+            intersects |= checkLineIntersection(concave_list, vertex1, vertex2, cluster[nearest_idx], vertex2);
+            if (!intersects) {
+              geometry_msgs::Point32 new_point;
+              cluster[nearest_idx].toPointMsg(new_point);
+              concave_list.insert(concave_list.begin() + i + 1, new_point);
+              i--;
+            }
+        }
+    }
+}
+
 void ConvertToPolygonDBSConcaveHull::simplifyPolygon(geometry_msgs::Polygon& polygon) {
     int triangleThreshold = 3;
     if(polygon.points.size() > 1
@@ -394,7 +434,7 @@ void ConvertToPolygonDBSConcaveHull::computeCentroidAndRadius(geometry_msgs::Pol
     }
     centroid.x = cx;
     centroid.y = cy;
-    radius     = std::sqrt(max_dist);
+    radius     = max_dist;
 }
 
 }   // convert_polygon namespace
