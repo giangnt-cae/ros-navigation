@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<launch>
+	<node name= "rviz" pkg= "rviz" type= "rviz" args="-d $(find graph_based_slam)/slam2d.rviz"/>
+	<node name="graph_based_slam" pkg="graph_based_slam" type="graph_based_slam" output="screen">
+		<param name = "log_level" value = "debug" />
+	</node>
+</launch>
