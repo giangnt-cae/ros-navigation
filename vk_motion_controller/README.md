@@ -75,3 +75,16 @@ $ cd build
 $ cmake ..
 $ make
 ```
+
+# Turtorial-on-Eigen-with CPP
+
+Build
+=====
+
+```
+$ cd eigen
+$ mkdir build
+$ cd build
+$ cmake ..
+$ make
+$ sudo make install
