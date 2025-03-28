@@ -33,14 +33,12 @@ class ScanMatcher {
                                      const std::vector<Eigen::Vector2d>& target,
                                      const Eigen::Affine2d& initial_guess,
                                      double max_correspondence_distance,
-                                     Eigen::Matrix3d& Hess);
+                                     Eigen::Matrix3d& Hess, bool& successful);
 
         void computeCovarianceAndMean(std::vector<Correspondence>& corres,
                                       Eigen::Vector2d& mean_ref,
                                       Eigen::Vector2d& mean_cur,
                                       Eigen::Matrix2d& H);
-        
-        double computeSumError(std::vector<Correspondence>& corres);
     private:
         void transformPoints(const Eigen::Affine2d& T,
                              std::vector<Eigen::Vector2d>& points);
@@ -57,7 +55,7 @@ class ScanMatcher {
                                 double max_correspondence_distance,
                                 std::vector<Correspondence>& corres);
 
-        int max_iterations_ = 500;
+        int max_iterations_ = 100;
         double epsilon_ = 1e-4;
 
 };

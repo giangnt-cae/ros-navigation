@@ -34,13 +34,13 @@ struct Node {
     Eigen::Vector3d pose;
     std::vector<Eigen::Vector2d> scan;
     std::vector<Eigen::Vector2d> points;
-    Eigen::Matrix3d inv_covar;
+    Eigen::Matrix3d omega;
     unsigned int id;
 };
 
 struct Edge {
     Eigen::Affine2d z;
-    Eigen::Matrix3d inv_covar;
+    Eigen::Matrix3d omega;
     unsigned int ni;
     unsigned int nj;
 };
@@ -50,19 +50,20 @@ struct Graph {
     std::vector<Edge> edges;
 };
 
-inline double normalize(double z);
+double normalize(double z);
 
-inline double angle_diff(double a, double b);
+double angle_diff(double a, double b);
 
 inline double sign(bool x) { return (x == true ? -1.0 : 1.0); }
 
-Eigen::Vector3d pose_lidar = {0.289, 0.0, 0.0};     // transform base_frame to lidar_frame
-Eigen::Vector3d initial_pose = {-20.0, 0.0, -9.6 * M_PI / 180};
+static const Eigen::Vector3d pose_lidar = {0.289, 0.0, 0.0};     // transform base_frame to lidar_frame
+static const Eigen::Vector3d initial_pose = {-20.0, 0.0, -9.6 * M_PI / 180};
+// static const Eigen::Vector3d initial_pose = {0.0, 0.0, 0.0};
 
 class GraphBasedSlam {
     private:
         ros::NodeHandle nh_;
-        ros::Publisher map_pub_, graph_pub_;
+        ros::Publisher map_pub_, graph_pub_, covariance_pub_;
         ros::Subscriber laser_scan_sub_, odom_sub_;
 
         typedef message_filters::sync_policies::ApproximateTime<nav_msgs::Odometry, sensor_msgs::LaserScan> MySyncPolicy;

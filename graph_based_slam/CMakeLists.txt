@@ -35,6 +35,7 @@ include_directories(
 add_executable(graph_based_slam src/graph_based_slam.cpp
   src/map.cpp
   src/scan_matcher.cpp
+  src/optimization.cpp
 )
 
 target_link_libraries(graph_based_slam

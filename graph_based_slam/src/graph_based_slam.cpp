@@ -1,4 +1,6 @@
 #include <graph_based_slam/graph_based_slam.hpp>
+#include <graph_based_slam/optimization.hpp>
+#include <graph_based_slam/detect_loop.hpp>
 
 namespace slam2d {
 
@@ -8,6 +10,7 @@ GraphBasedSlam::GraphBasedSlam() : sm_(NULL),
     init();
     map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("map", 1);
     graph_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("graph", 2);
+    covariance_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("covariance", 1);
 
     message_filters::Subscriber<nav_msgs::Odometry> odom_sub_(nh_, "odom", 10);
     message_filters::Subscriber<sensor_msgs::LaserScan> laser_scan_sub_(nh_, "scan1", 10);
@@ -27,8 +30,8 @@ void GraphBasedSlam::init() {
     nh_.param("odom_frame", odom_frame_, std::string("odom"));
     nh_.param("model_type", model_type_, std::string("omni"));
 
-    nh_.param("min_trans", min_trans_, 0.5);
-    nh_.param("min_rot", min_rot_, 0.5);
+    nh_.param("min_trans", min_trans_, 0.3);
+    nh_.param("min_rot", min_rot_, 0.2);
     nh_.param("min_range", min_range_, 0.05);
     nh_.param("max_range", max_range_, 15.0);
     nh_.param("angle_min", angle_min_, -M_PI / 2);
@@ -65,6 +68,10 @@ void GraphBasedSlam::init() {
     marker_node_.color.b = 0.0;
     marker_node_.color.a = 2.0;
     marker_node_.lifetime = ros::Duration(0);
+    marker_node_.pose.orientation.x = 0.0;
+    marker_node_.pose.orientation.y = 0.0;
+    marker_node_.pose.orientation.z = 0.0;
+    marker_node_.pose.orientation.w = 1.0;
 
     marker_edge_.header.frame_id = map_frame_;
     marker_edge_.header.stamp = ros::Time::now();
@@ -80,6 +87,10 @@ void GraphBasedSlam::init() {
     marker_edge_.color.b = 0.0;
     marker_edge_.color.a = 2.0;
     marker_edge_.lifetime = ros::Duration(0);
+    marker_edge_.pose.orientation.x = 0.0;
+    marker_edge_.pose.orientation.y = 0.0;
+    marker_edge_.pose.orientation.z = 0.0;
+    marker_edge_.pose.orientation.w = 1.0;
 }
 
 void GraphBasedSlam::dataCallback(const nav_msgs::Odometry& msg1,
@@ -118,6 +129,9 @@ void GraphBasedSlam::dataCallback(const nav_msgs::Odometry& msg1,
         node_->scan = scan_;
         node_->points = points;
         node_->id   = 0;
+        node_->omega << 1e3,   0,   0,
+                        0  , 1e3,   0,
+                        0  ,   0, 1e3;
         graph_->nodes.push_back(*node_);
         
         rayCasting(node_, map_);
@@ -143,11 +157,12 @@ void GraphBasedSlam::dataCallback(const nav_msgs::Odometry& msg1,
         // Eigen::Affine2d T_t = sm_->registration(points, map_, initial_guess, max_distance_threshold_);
 
         /* Scan to scan */
+        bool successful;
         Eigen::Affine2d Ti = XYZEulertoAffineMatrix(node_->pose);
         Eigen::Affine2d Tj = XYZEulertoAffineMatrix(robot_pose_);
         Eigen::Affine2d initial_guess = Ti.inverse() * Tj;
         Eigen::Matrix3d H;
-        Eigen::Affine2d Tij = sm_->registration(points, node_->points, initial_guess, max_distance_threshold_, H);
+        Eigen::Affine2d Tij = sm_->registration(points, node_->points, initial_guess, max_distance_threshold_, H, successful);
         Eigen::Affine2d T_t = Ti * Tij;
         
         /*-------------------------------------------------*/
@@ -161,16 +176,10 @@ void GraphBasedSlam::dataCallback(const nav_msgs::Odometry& msg1,
         graph_->nodes.push_back(*node_);
 
         edge_->z  = Tij;
-        edge_->inv_covar = H;
+        edge_->omega = H;
         edge_->ni = node_->id - 1;
         edge_->nj = node_->id;
         graph_->edges.push_back(*edge_);
-
-        Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> solver(H.inverse().block<2,2>(0,0));
-        Eigen::Vector2d eigenvalues = solver.eigenvalues();
-        Eigen::Matrix2d eigenvectors = solver.eigenvectors();
-        std::cout << "eigenvalues" << eigenvalues << std::endl;
-        std::cout << "eigenvectors" << eigenvectors << std::endl;
         
         /* Expand map */
         // unsigned int mx, my;
@@ -189,7 +198,27 @@ void GraphBasedSlam::dataCallback(const nav_msgs::Odometry& msg1,
         //     }
         // }
 
-        rayCasting(node_, map_);
+        // rayCasting(node_, map_);
+        bool loop_closure = false;
+        if(computeInformationMatrix(graph_)) {
+            for(int i = 0; i < graph_->nodes.size() - 1; i++) {
+                double d = mahalanobisDistance(graph_->nodes[i], graph_->nodes.back());
+                if(d <= MAX_MALAHANOBIS_DISTANCE) {
+                    std::cout << "d: " << d << "; N: " << graph_->nodes.size() << std::endl;
+                    Tij = sm_->registration(graph_->nodes[i].points, graph_->nodes.back().points, initial_guess, max_distance_threshold_, H, successful);
+                    if(successful) {
+                        edge_->z  = Tij;
+                        edge_->omega = H;
+                        edge_->ni = graph_->nodes[i].id;
+                        edge_->nj = graph_->nodes.back().id;
+                        graph_->edges.push_back(*edge_);
+                        loop_closure = true;
+                    }
+                }
+            }
+        }
+        if(loop_closure)
+            graphOptimization(graph_);
         visualization();
 
         f_odom_pose_ = odom_t_;
@@ -198,6 +227,7 @@ void GraphBasedSlam::dataCallback(const nav_msgs::Odometry& msg1,
 }
 
 void GraphBasedSlam::visualization() {
+    #ifdef UpdateMap2D
     nav_msgs::OccupancyGrid ros_map;
     ros_map.header.stamp = ros::Time::now();
     ros_map.header.frame_id = map_frame_;
@@ -219,38 +249,113 @@ void GraphBasedSlam::visualization() {
             ros_map.data[i] = -1;
     }
     map_pub_.publish(ros_map);
+    #endif
     
     int num_nodes = graph_->nodes.size();
-    int num_edges = graph_->edges.size();
     int id = 0;
     marker_graph_.markers.clear();
-    for(int i = 0; i < num_nodes; i++) {
+    for(const auto& node : graph_->nodes) {
         marker_node_.id = id;
-        marker_node_.pose.position.x = graph_->nodes[i].pose[0];
-        marker_node_.pose.position.y = graph_->nodes[i].pose[1];
+        marker_node_.pose.position.x = node.pose[0];
+        marker_node_.pose.position.y = node.pose[1];
+        marker_node_.pose.position.z = 0.0;
         marker_graph_.markers.push_back(marker_node_);
         id++;
     }
     
-    for(int j = 0; j < num_edges; j++) {
+    for(const auto& edge : graph_->edges) {
         marker_edge_.id = id;
         marker_edge_.points.clear();
         geometry_msgs::Point p;
 
-        int ni = graph_->edges[j].ni;
-        int nj = graph_->edges[j].nj;
-
-        p.x = graph_->nodes[ni].pose[0];
-        p.y = graph_->nodes[ni].pose[1];
+        int i = edge.ni, j = edge.nj;
+        p.x = graph_->nodes[i].pose[0];
+        p.y = graph_->nodes[i].pose[1];
         marker_edge_.points.push_back(p);
 
-        p.x = graph_->nodes[nj].pose[0];
-        p.y = graph_->nodes[nj].pose[1];
+        p.x = graph_->nodes[j].pose[0];
+        p.y = graph_->nodes[j].pose[1];
         marker_edge_.points.push_back(p);
 
         marker_graph_.markers.push_back(marker_edge_);
         id++;
     }
+
+    #ifdef Elipse
+    if(!computeInformationMatrix(graph_))
+        return;
+
+    visualization_msgs::MarkerArray marker_array;
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "map";
+    marker.header.stamp = ros::Time::now();
+    marker.ns = "Elipse";
+    marker.type = visualization_msgs::Marker::SPHERE;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.color.r = 1.0;
+    marker.color.g = 0.0;
+    marker.color.b = 0.0;
+    marker.color.a = 0.8;
+    
+    for(const auto& node : graph_->nodes) {
+        marker.id = id;
+        marker.pose.position.x = node.pose[0];
+        marker.pose.position.y = node.pose[1];
+        marker.pose.position.z = 0;
+        Eigen::Matrix2d P = node.omega.block<2,2>(0,0);
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> solver(P.inverse());
+        Eigen::Vector2d eigenvalues = solver.eigenvalues();
+        Eigen::Matrix2d eigenvectors = solver.eigenvectors();
+
+        double axis_length_1 = 2 * std::max(0.01, sqrt(std::max(0.0, eigenvalues(1))));
+        double axis_length_2 = 2 * std::max(0.01, sqrt(std::max(0.0, eigenvalues(0))));
+
+        double angle = atan2(eigenvectors(1, 1), eigenvectors(0, 1));
+
+        if (fabs(eigenvectors(0, 1)) > fabs(eigenvectors(1, 1))) {
+            marker.scale.x = axis_length_1;
+            marker.scale.y = axis_length_2;
+        } else {
+            marker.scale.x = axis_length_2;
+            marker.scale.y = axis_length_1;
+        }
+        marker.scale.z = 0.1;
+
+        tf2::Quaternion q;
+        q.setRPY(0, 0, angle);
+        marker.pose.orientation.x = q.x();
+        marker.pose.orientation.y = q.y();
+        marker.pose.orientation.z = q.z();
+        marker.pose.orientation.w = q.w();
+
+        marker_array.markers.push_back(marker);
+        id++;
+    }
+    covariance_pub_.publish(marker_array);
+    #endif
+    
+    #ifdef DetectLoop
+    for(int i = 0; i < num_nodes - 1; i++) {
+        double d = mahalanobisDistance(graph_->nodes[i], graph_->nodes.back());
+        if(d <= MAX_MALAHANOBIS_DISTANCE) {
+            marker_edge_.id = id;
+            marker_edge_.points.clear();
+            geometry_msgs::Point p;
+
+            int k = graph_->nodes.back().id;
+            p.x = graph_->nodes[i].pose[0];
+            p.y = graph_->nodes[i].pose[1];
+            marker_edge_.points.push_back(p);
+
+            p.x = graph_->nodes[k].pose[0];
+            p.y = graph_->nodes[k].pose[1];
+            marker_edge_.points.push_back(p);
+
+            marker_graph_.markers.push_back(marker_edge_);
+            id++;
+        }
+    }
+    #endif
     graph_pub_.publish(marker_graph_);
 }
 

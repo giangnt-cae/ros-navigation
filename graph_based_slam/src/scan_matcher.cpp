@@ -132,7 +132,8 @@ Eigen::Affine2d ScanMatcher::registration(const std::vector<Eigen::Vector2d>& sc
                                           const std::vector<Eigen::Vector2d>& target,
                                           const Eigen::Affine2d& initial_guess,
                                           double max_correspondence_distance,
-                                          Eigen::Matrix3d& Hess) {
+                                          Eigen::Matrix3d& Hess, bool& successful) {
+    successful = false;
     std::vector<Eigen::Vector2d> source = scan;
     transformPoints(initial_guess, source);
     Eigen::Affine2d T_icp = Eigen::Affine2d::Identity();
@@ -155,7 +156,10 @@ Eigen::Affine2d ScanMatcher::registration(const std::vector<Eigen::Vector2d>& sc
         Eigen::Affine2d deltaT = XYZEulertoAffineMatrix(dx);
         transformPoints(deltaT, source);
         T_icp = deltaT * T_icp;
-        if(dx.norm() < epsilon_) break;
+        if(dx.norm() < epsilon_) {
+            successful = true;
+            break;
+        }
     }
     Eigen::Affine2d Tij = T_icp * initial_guess;
     Hess = hessianMatrix(corres, Tij);
