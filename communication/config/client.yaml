@@ -1,0 +1,11 @@
+global_frame: "map"
+base_frame: "base_link"
+ID: "AGV-1997"
+model: "SLAM-AGV"
+state: "movingxx"
+battery_level: 65
+length: 0.7
+width: 0.6
+height: 0.45
+SERVER_PORT: 5555
+SERVER_IP: "10.1.8.235"

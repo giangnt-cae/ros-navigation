@@ -1,0 +1,5 @@
+<launch>
+  <node pkg="communication" type="agv_client" name="agv_client" output="screen">
+    <rosparam file="$(find communication)/config/client.yaml" command="load"/>
+  </node>
+</launch>

@@ -1,0 +1,3 @@
+<launch>    
+    <node pkg="communication" type="agv_server" name="agv_server" output="screen"/>
+</launch>
