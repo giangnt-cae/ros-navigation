@@ -29,6 +29,7 @@ void ObstacleLayer::onInitialize() {
     private_nh.param("obstacle_range", obstacle_range, 2.0);
     private_nh.param("raytrace_range", raytrace_range, 3.0);
     private_nh.param("combination_method", combination_method_, 1);
+    private_nh.param("footprint_clearing_enabled", footprint_clearing_enabled_, true);
     
     // split the topics based on whitespace
     std::stringstream ss(topics_string);
@@ -48,6 +49,7 @@ void ObstacleLayer::onInitialize() {
         source_node.param("data_type", data_type, std::string("LaserScan"));
         source_node.param("min_obstacle_height", min_obstacle_height, 0.0);
         source_node.param("max_obstacle_height", max_obstacle_height, 2.0);
+        max_obstacle_height_ = max_obstacle_height;
         source_node.param("inf_is_valid", inf_is_valid, false);
         source_node.param("clearing", clearing, false);
         source_node.param("marking", marking, true);

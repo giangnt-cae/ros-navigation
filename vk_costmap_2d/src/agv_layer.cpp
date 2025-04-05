@@ -15,27 +15,28 @@ void AgvLayer::onInitialize() {
     ros::NodeHandle nh;
     rolling_window_ = layered_costmap_->isRolling();
     default_value_ = NO_INFORMATION;
+    private_nh.param("id", id_, std::string("AGV-1709"));
 
     AgvLayer::matchSize();
     updated_ = true;
-    agv_sub_ = nh.subscribe("agv_info", 1, &AgvLayer::errorAgvInfoCallback, this);
+    agv_sub_ = nh.subscribe("agv_info", 10, &AgvLayer::errorAgvInfoCallback, this);
 }
 
 void AgvLayer::errorAgvInfoCallback(const AgvInfoArrayConstPtr& msg) {
     AgvInfo agv;
     std::vector<geometry_msgs::Point> polygon;
     std::vector<geometry_msgs::Point> footprint_spec;
+    polygons_.clear();
     for(unsigned int i = 0; i < msg->agvs.size(); i++) {
         agv = msg->agvs[i];
-        ROS_INFO("AGV %s at pose x: %.3f, y: %.3f, theta: %.3f is error!",
+        if(agv.id == id_) continue;
+        ROS_INFO("%s at pose x: %.3f, y: %.3f, theta: %.3f!",
                 agv.id.c_str(), agv.current_pose.position.x, agv.current_pose.position.y,
                 tf2::getYaw(agv.current_pose.orientation));
-        footprint_spec = makeFootprintFromWidthAndHeight(agv.width, agv.length);
+        footprint_spec = makeFootprintFromWidthAndHeight(agv.length, agv.width);
         transformFootprint(agv.current_pose.position.x, agv.current_pose.position.y,
                            tf2::getYaw(agv.current_pose.orientation), footprint_spec, polygon);
-        if(!setConvexPolygonCost(polygon, LETHAL_OBSTACLE)) {
-            continue;
-        }
+        polygons_.push_back(polygon);
     }
     agv_received_ = true;
 }
@@ -59,6 +60,12 @@ void AgvLayer::updateBounds(double robot_x, double robot_y, double robot_yaw,
     *max_x = std::max(tmp_max_x, *max_x);
     *max_y = std::max(tmp_max_y, *max_y);
     #endif
+    resetFullMap();
+    for(const auto& polygon : polygons_) {
+        if(!setConvexPolygonCost(polygon, LETHAL_OBSTACLE)) {
+            continue;
+        }
+    }
     return;                             
 }
 

@@ -262,7 +262,7 @@ void Costmap2D::convexFillCells(const std::vector<MapLocation>& polygon,
 
     polygonOutlineCells(polygon, polygon_cells);
     
-    // Sắp xếp các cell theo giá trị `x`
+    // Sort by x
     std::sort(polygon_cells.begin(), polygon_cells.end(),
               [](const MapLocation& a, const MapLocation& b) {
                   return (a.x < b.x) || (a.x == b.x && a.y < b.y);
@@ -272,7 +272,6 @@ void Costmap2D::convexFillCells(const std::vector<MapLocation>& polygon,
 
     std::vector<MapLocation> filled_cells;
 
-    // Duyệt qua từng cột (theo x)
     for (unsigned int x = min_x; x <= max_x; ++x) {
         std::vector<MapLocation> column_cells;
         for (const auto& cell : polygon_cells) {
@@ -282,7 +281,7 @@ void Costmap2D::convexFillCells(const std::vector<MapLocation>& polygon,
         }
         if (column_cells.empty()) continue;
 
-        // Tìm min_pt và max_pt (theo y)
+        // Find min_pt and max_pt (by y)
         MapLocation min_pt = *std::min_element(column_cells.begin(), column_cells.end(),
                                                [](const MapLocation& a, const MapLocation& b) {
                                                    return a.y < b.y;

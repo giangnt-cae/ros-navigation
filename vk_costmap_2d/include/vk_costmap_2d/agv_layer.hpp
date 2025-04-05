@@ -43,6 +43,8 @@ class AgvLayer : public CostmapLayer {
         bool use_maximum_;
         bool agv_received_;
         bool rolling_window_;
+        std::vector<std::vector<geometry_msgs::Point>> polygons_;
+        std::string id_;
 
 };  // AgvLayer class
 

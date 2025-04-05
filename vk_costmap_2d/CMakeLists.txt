@@ -36,7 +36,7 @@ generate_messages(
 
 catkin_package(
  INCLUDE_DIRS include
- LIBRARIES vk_costmap_2d
+ LIBRARIES vk_costmap_2d_lib
  CATKIN_DEPENDS geometry_msgs
                 nav_msgs
                 roscpp
@@ -57,7 +57,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-add_executable(vk_costmap_2d src/costmap_2d_ros.cpp
+add_library(vk_costmap_2d_lib
   src/layer.cpp
   src/costmap_2d.cpp
   src/costmap_layer.cpp
@@ -70,7 +70,10 @@ add_executable(vk_costmap_2d src/costmap_2d_ros.cpp
   src/obstacle_layer.cpp
 )
 
+add_executable(vk_costmap_2d src/costmap_2d_ros.cpp)
+
 target_link_libraries(vk_costmap_2d
+  vk_costmap_2d_lib
   ${catkin_LIBRARIES}
 )
 

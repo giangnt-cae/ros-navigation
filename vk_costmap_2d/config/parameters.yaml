@@ -2,11 +2,11 @@ global_frame: "map"
 base_frame: "base_link"
 rolling_window: true
 publish_rate: 10.0
-width:  5.0
-height: 5.0
-resolution: 0.02
+width:  3.0
+height: 3.0
+resolution: 0.03
 robot_radius: 0.5
-footprint_padding_X: 0.6
+footprint_padding_X: 0.0
 footprint_padding_Y: 0.0
 
 costmap/obstacle_layer:
@@ -44,3 +44,6 @@ unpadded_footprint:
     y: -0.297
   - x: -0.331
     y: 0.297
+
+costmap/agv_layer:
+  id: "AGV-1997"
