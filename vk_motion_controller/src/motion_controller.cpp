@@ -5,7 +5,8 @@ MotionController::MotionController(tf2_ros::Buffer& tf)
     W_(DM::diagcat({0.5, 0.5})),
     Q_N_(DM::diagcat({10, 10, 2})),
     tf_(tf),
-    ref_traj_(NULL)
+    ref_traj_(NULL),
+    private_nh_("~")
 {   
     vel_pub_ = nh_.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
     local_planner_pub_ = nh_.advertise<geometry_msgs::PoseArray>("local_planner", 10);
@@ -137,18 +138,18 @@ void MotionController::run() {
 }
 
 void MotionController::init() {
-    nh_.param("horizon_size", N_horizon_, 15);
-    nh_.param("horizon_control", N_controls_, 10);
-    nh_.param("max_obstacles", N_maxobs_, 10);
-    nh_.param("max_vertices", N_maxvertices_, 3);
-    nh_.param("T_sample", T_s_, 0.5);
-    nh_.param("min_obstacle_distance", min_obstacle_distance_, 0.05);
-    nh_.param("cir_radius", cir_radius_, 0.25);
-    nh_.param("max_error_position", max_error_position_, 2.0);
-    nh_.param("max_error_angle", max_error_angle_, M_PI / 6);
-    nh_.param("avoidance_enable", avoidance_enable_, true);
-    nh_.param("keep_lane", keep_lane_, true);
-    nh_.param("width_lane", width_lane_, 1.0);
+    private_nh_.param("horizon_size", N_horizon_, 15);
+    private_nh_.param("horizon_control", N_controls_, 10);
+    private_nh_.param("max_obstacles", N_maxobs_, 10);
+    private_nh_.param("max_vertices", N_maxvertices_, 3);
+    private_nh_.param("T_sample", T_s_, 0.5);
+    private_nh_.param("min_obstacle_distance", min_obstacle_distance_, 0.05);
+    private_nh_.param("cir_radius", cir_radius_, 0.25);
+    private_nh_.param("max_error_position", max_error_position_, 2.0);
+    private_nh_.param("max_error_angle", max_error_angle_, M_PI / 6);
+    private_nh_.param("avoidance_enable", avoidance_enable_, true);
+    private_nh_.param("keep_lane", keep_lane_, true);
+    private_nh_.param("width_lane", width_lane_, 1.0);
 
     if (loadFootprintFromParam("unpadded_footprint", unpadded_footprint_)) {
         ROS_INFO("Successfully loaded unpadded footprint.");

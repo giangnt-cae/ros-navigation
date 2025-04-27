@@ -130,7 +130,7 @@ class MotionController {
         void setCollisionConstraints(casadi::SX& cst);
         void setKeepLaneConstraints(casadi::SX& cst);
 
-        ros::NodeHandle nh_;
+        ros::NodeHandle nh_, private_nh_;
         ros::Subscriber path_sub_, obstacle_sub_, foot_print_sub_;
         ros::Publisher vel_pub_, local_planner_pub_, reference_pub_;
 
