@@ -11,10 +11,10 @@ ConvertToPolygonDBSConcaveHull::ConvertToPolygonDBSConcaveHull() {
 
 void ConvertToPolygonDBSConcaveHull::init() {
     costmap_ = NULL;
-    nh_.param("cluster_max_distance", cluster_max_distance_, 0.5);
+    nh_.param("cluster_max_distance", cluster_max_distance_, 0.2);
     nh_.param("cluster_min_pts", cluster_min_pts_, 3);
-    nh_.param("cluster_max_pts_", cluster_max_pts_, 30);
-    nh_.param("convex_hull_min_pt_separation", convex_hull_min_pt_separation_, 0.05);
+    nh_.param("cluster_max_pts_", cluster_max_pts_, 10);
+    nh_.param("convex_hull_min_pt_separation", convex_hull_min_pt_separation_, 0.0);
     nh_.param("global_frame", global_frame_, std::string("map"));
     nh_.param("concave_hull_depth", concave_hull_depth_, 2.0);
 
