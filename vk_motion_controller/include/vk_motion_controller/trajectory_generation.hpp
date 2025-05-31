@@ -28,6 +28,10 @@ class Trajectory {
         void setUpdated(bool updated) { updated_ = updated; }
 
         geometry_msgs::Pose getGlobalGoal() { return nav_goal_; }
+
+        double getTimeStamp() { return time_stamp_; }
+
+        void updateTimeStamp(double dt) { time_stamp_ += dt; }
         
         ~Trajectory();
         
@@ -49,6 +53,7 @@ class Trajectory {
         std::string global_frame_, base_frame_;
         bool updated_;
         geometry_msgs::Pose nav_goal_;
+        double time_stamp_;
 
         std::mutex mtx_;
 };

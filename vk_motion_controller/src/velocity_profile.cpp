@@ -44,21 +44,55 @@ RefPoint NumericalVelocityProfile::computeU(int index) {
         }
     }
 
-    /* Bisector Method */
-    double u_left = 0;
-    double u_right = 1;
-    double u = (u_left + u_right) / 2;
-    double eps = spline_.computeArcLength(0, u, k) - delta_length;
-    while(fabs(eps) > 1e-3) {
-        if(eps < 0)
-            u_left = u;
-        else if (eps > 0)
-            u_right = u;
-        u = (u_left + u_right) / 2;
-        eps = spline_.computeArcLength(0, u, k) - delta_length;
-    }
+    double u_left = 0.0;
+    double u_right = 1.0;
+    double eps = 1e-4;
+    int max_iter = 100;
+    int iter = 0;
 
     RefPoint p;
+    double total_length = spline_.computeArcLength(0.0, 1.0, k);
+    if (delta_length <= 0.0) {
+        p.u = 0.0;
+        p.t = 0.0;
+        p.index = k;
+        return p;
+    }
+    if (delta_length >= total_length) {
+        p.u = 1.0;
+        p.t = 0.0;
+        p.index = k;
+        return p;
+    }
+
+    double f_left = spline_.computeArcLength(0.0, u_left, k) - delta_length;
+    double f_right = spline_.computeArcLength(0.0, u_right, k) - delta_length;
+
+    if (f_left * f_right > 0) {
+        ROS_ERROR("[findUbyArcLength] No root in [0,1] for given delta_length!");
+        p.u = 1.0;
+        p.t = 0.0;
+        p.index = k;
+        return p;
+    }
+
+    double u;
+    while (iter++ < max_iter) {
+        u = 0.5 * (u_left + u_right);
+        double f_u = spline_.computeArcLength(0.0, u, k) - delta_length;
+
+        if (fabs(f_u) < eps)
+            break;
+
+        if (f_u * f_left < 0) {
+            u_right = u;
+            f_right = f_u;
+        } else {
+            u_left = u;
+            f_left = f_u;
+        }
+    }
+
     p.u = u;
     p.t = 0.0;
     p.index = k;

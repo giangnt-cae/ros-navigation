@@ -1,10 +1,11 @@
 #include <vk_motion_controller/motion_controller.hpp>
 MotionController::MotionController(tf2_ros::Buffer& tf)
-    : Q_(DM::diagcat({5, 5, 2})),
+    : Q_(DM::diagcat({5, 5, 5})),
     R_(DM::diagcat({0.1, 0.1})),
     W_(DM::diagcat({0.5, 0.5})),
-    Q_N_(DM::diagcat({10, 10, 2})),
+    Q_N_(DM::diagcat({10, 10, 10})),
     tf_(tf),
+    transform_tolerance_(0.5),
     ref_traj_(NULL),
     private_nh_("~")
 {   
@@ -23,24 +24,25 @@ void MotionController::run() {
     DM p    = DM::zeros(numP, 1);
     DM x0_  = DM::zeros(numX, 1);
     DM u0_  = DM::zeros(numU, 1);
-
+    
     casadi::Function solver = nlpsol("solver", "ipopt", nlp_, opts_);
+
     ros::Time current_time = ros::Time::now(), last_time = ros::Time::now();
 
     double robot_pose[3];
-    double x_ref[5];        // [x, y, theta, v, w]
-    double dt, t = 0;
+    double x_ref[5];
+    double dt;
     ros::Rate rate(10);
     while(ros::ok()) {
         ros::spinOnce();
         current_time = ros::Time::now();
-        if(ref_traj_->getUpdated() && getRobotPose(robot_pose)) {    
+        if(ref_traj_->getUpdated() && getRobotPose(robot_pose)) {
             dt = (current_time - last_time).toSec();
 
             p(Slice(0, num_states_)) = {robot_pose[0], robot_pose[1], robot_pose[2]};
             
             for(int i = 0; i < N_horizon_; i++) {
-                ref_traj_->getPoseAndVelocity(x_ref, t + (i + 1) * T_s_);
+                ref_traj_->getPoseAndVelocity(x_ref, ref_traj_->getTimeStamp() + (i + 1) * T_s_);
                 p(Slice(num_states_ * (i + 1), num_states_ * (i + 2))) = {x_ref[0], x_ref[1], x_ref[2]};
                 p(Slice(numX + num_controls_ * i, numX + num_controls_ * (i + 1))) = {x_ref[3], x_ref[4]};
             }
@@ -48,7 +50,7 @@ void MotionController::run() {
             DM x_first = p(Slice(0, num_states_)), x_end = p(Slice(num_states_, 2 * num_states_));
             DM delta = diffStateVector(x_first, x_end);
             if((double)norm_2(delta(Slice(0, 2))) < max_error_position_)
-                t = t + dt;
+                ref_traj_->updateTimeStamp(dt);
 
             for(auto& polygon : obstacles_) {
                 polygon.filter(N_maxvertices_, robot_pose);
@@ -67,6 +69,38 @@ void MotionController::run() {
             }
             
             /*----------------------------------IPOPT solver -------------------------------------*/
+
+            double x_min = robot_pose[0] - width_map_ / 2.0;
+            double x_max = robot_pose[0] + width_map_ / 2.0;
+            double y_min = robot_pose[1] - height_map_ / 2.0;
+            double y_max = robot_pose[1] + height_map_ / 2.0;
+
+            casadi::DM lbx = DM::zeros(numX + numU, 1);
+            lbx(Slice(0, numX, num_states_)) = x_min;
+            lbx(Slice(1, numX, num_states_)) = y_min;
+            lbx(Slice(2, numX, num_states_)) = -M_PI;
+
+            lbx(Slice(numX, numX + numU, num_controls_))     = -ref_traj_->getMaxVelocityLinear();
+            lbx(Slice(numX + 1, numX + numU, num_controls_)) = -ref_traj_->getMaxvelocityAngular();
+
+            casadi::DM ubx = DM::zeros(numX + numU, 1);
+            ubx(Slice(0, numX, num_states_)) = x_max;
+            ubx(Slice(1, numX, num_states_)) = y_max;
+            ubx(Slice(2, numX, num_states_)) = M_PI;
+
+            ubx(Slice(numX, numX + numU, num_controls_))     = ref_traj_->getMaxVelocityLinear();
+            ubx(Slice(numX + 1, numX + numU, num_controls_)) = ref_traj_->getMaxvelocityAngular();
+
+            args_["lbx"] = lbx;
+            args_["ubx"] = ubx;
+
+            DM lbg = DM::zeros(cst_.numel(), 1);
+            DM ubg = DM::zeros(cst_.numel(), 1);
+            ubg(Slice(numX, cst_.numel())) = casadi::inf;
+
+            args_["lbg"] = lbg;
+            args_["ubg"] = ubg;
+
             args_["p"]   = p;
             args_["x0" ] = DM::vertcat({reshape(x0_, numX, 1),
                                         reshape(u0_, numU, 1)});
@@ -78,12 +112,20 @@ void MotionController::run() {
                                                {"ubg", obstacles_.empty() ?  casadi::inf : args_["ubg"]},
                                                {"p",   args_["p"]}});
             
-            // std::map<std::string, casadi::GenericType> solver_stats = solver.stats();
-            // for (const auto& kv : solver_stats) {
-            //     if (kv.first.find("t_wall_") == 0 || kv.first.find("t_proc_") == 0) {
-            //         ROS_INFO("%s: %f seconds", kv.first.c_str(), kv.second.as_double());
-            //     }
-            // }
+            std::map<std::string, casadi::GenericType> solver_stats = solver.stats();
+            double total_wall_time = 0.0;
+            for (const auto& kv : solver_stats) {
+                // if (kv.first.find("t_wall_") == 0 || kv.first.find("t_proc_") == 0) {
+                //     ROS_INFO("%s: %f seconds", kv.first.c_str(), kv.second.as_double());
+                // }
+                if (kv.first.find("t_wall_") == 0) {
+                    total_wall_time += kv.second.as_double();
+                }
+            }
+            ROS_INFO("---> Total t_wall_* time: %.6f seconds", total_wall_time);
+
+            int iter_count = static_cast<int>(solver_stats.at("iter_count"));
+            ROS_INFO("---> Solver iterations: %d", iter_count);
 
             DM x_opt = (DM)res["x"];
             x0_      = x_opt(Slice(0, numX));
@@ -95,6 +137,9 @@ void MotionController::run() {
             // ROS_INFO_STREAM("lbg: " << args_["lbg"]);
             // ROS_INFO_STREAM("ubg: " << args_["ubg"]);
             // ROS_INFO_STREAM("p:   " << args_["p"]);
+
+            // ROS_INFO_STREAM("f: " << res["f"]);
+            // ROS_INFO_STREAM("g: " << res["g"]);
             /*----------------------------------------------------------------------------------*/
             
             // Velocity publish
@@ -138,26 +183,43 @@ void MotionController::run() {
 }
 
 void MotionController::init() {
-    private_nh_.param("horizon_size", N_horizon_, 15);
+    private_nh_.param("horizon_size", N_horizon_, 10);
     private_nh_.param("horizon_control", N_controls_, 10);
     private_nh_.param("max_obstacles", N_maxobs_, 10);
-    private_nh_.param("max_vertices", N_maxvertices_, 3);
+    private_nh_.param("max_vertices", N_maxvertices_, 5);
     private_nh_.param("T_sample", T_s_, 0.5);
     private_nh_.param("min_obstacle_distance", min_obstacle_distance_, 0.05);
     private_nh_.param("cir_radius", cir_radius_, 0.25);
-    private_nh_.param("max_error_position", max_error_position_, 2.0);
+    private_nh_.param("max_error_position", max_error_position_, 0.5);
     private_nh_.param("max_error_angle", max_error_angle_, M_PI / 6);
-    private_nh_.param("avoidance_enable", avoidance_enable_, true);
-    private_nh_.param("keep_lane", keep_lane_, true);
+    private_nh_.param("avoidance_enable", avoidance_enable_, false);
+    private_nh_.param("keep_lane", keep_lane_, false);
     private_nh_.param("width_lane", width_lane_, 1.0);
+    private_nh_.param("lamda", lamda_, 50.0);
+    private_nh_.param("width_map", width_map_, 10.0);
+    private_nh_.param("height_map", height_map_, 10.0);
+    private_nh_.param("sx", sx_, 4);
+    private_nh_.param("sy", sy_, 1);
+    private_nh_.param("footprint_padding_X", footprint_padding_X_, (float)0.2);
+    private_nh_.param("footprint_padding_Y", footprint_padding_Y_, (float)0.0);
 
+    std::vector<geometry_msgs::Point> unpadded_footprint_;
     if (loadFootprintFromParam("unpadded_footprint", unpadded_footprint_)) {
         ROS_INFO("Successfully loaded unpadded footprint.");
+        padded_footprint_ = unpadded_footprint_;
+        if(footprint_padding_X_ > 0)
+            padFootprintX(padded_footprint_, footprint_padding_X_);
+        if(footprint_padding_Y_ > 0)
+            padFootprintY(padded_footprint_, footprint_padding_Y_);
+        
+        deCompositionFootprint(padded_footprint_, sx_, sy_);
     } else {
         ROS_WARN("Failed to load unpadded footprint. Using default.");
     }
 
     ROS_INFO("Circle raidus of disc: %.3f [m], min_obstacle_distance: %.3f [m]", cir_radius_, min_obstacle_distance_);
+
+    ROS_INFO("CASADI Version: %s", casadi::CasadiMeta::version());
 
     X = SX::sym("X", num_states_, N_horizon_+1);
     U = SX::sym("U", num_controls_, N_horizon_);
@@ -173,7 +235,6 @@ void MotionController::init() {
     if(keep_lane_)
         setKeepLaneConstraints(cst_);
 
-    // IPOPT solver
     SX x_ = SX::vertcat({SX::reshape(X, -1, 1), SX::reshape(U, -1, 1)});
     nlp_["x"] = x_;
     nlp_["f"] = obj_;
@@ -181,58 +242,28 @@ void MotionController::init() {
     nlp_["g"] = cst_;
 
     opts_ = casadi::Dict();
-    opts_["print_time"] = 0;
-    opts_["ipopt.print_level"] = 0;
-    opts_["ipopt.acceptable_tol"] = 1e-8;
-    opts_["ipopt.max_iter"] = 500;
-    opts_["ipopt.acceptable_obj_change_tol"] = 1e-6;
+    opts_["print_time"] = 0;                                    // Defaut 1
+    opts_["ipopt.print_level"] = 0;                             // Defaut 5
+    opts_["ipopt.acceptable_tol"] = 1e-8;                       // Defaut 1e-6
+    opts_["ipopt.max_iter"] = 100;                              // Defaut 3000                     
+    opts_["ipopt.acceptable_obj_change_tol"] = 1e-6;            // Defaut 1e-4
 
-    // opts_["ipopt.mu_strategy"] = "adaptive";
-    // opts_["ipopt.mu_init"] = 1e-2;
-    // opts_["ipopt.warm_start_init_point"] = "yes";
-    // opts_["ipopt.hessian_approximation"] = "limited-memory";
-    // opts_["ipopt.linear_solver"] = "mumps";
+    // opts_["ipopt.mu_strategy"] = "adaptive";                    // Default "monotone"
+    // opts_["ipopt.mu_init"] = 1e-2;                              // Default 1e-1
+    // opts_["ipopt.warm_start_init_point"] = "yes";               // Default "no"
+    // opts_["ipopt.hessian_approximation"] = "limited-memory";    // Default "exact"
+    // opts_["ipopt.linear_solver"] = "mumps";                     // Default "ma27"
 
-    // opts_["ipopt.constr_viol_tol"] = 1e-6;
-    // opts_["ipopt.bound_relax_factor"] = 0.0;
+    // opts_["ipopt.constr_viol_tol"] = 1e-4;                      // Default 1e-4
+    // opts_["ipopt.bound_relax_factor"] = 0.0;                    // Default 1e-8
     // casadi::Dict jit_opts;
-    // jit_opts["compiler"] = "clang++";
-    // jit_opts["flags"] = "-O3";
-    // opts_["jit_options"] = jit_opts;
+    // jit_opts["compiler"] = "clang++";                           // Default "g++"
+    // jit_opts["flags"] = "-O3";                                  // Default "-02"
+    // opts_["jit_options"] = jit_opts;                            
 
     ref_traj_     = new Trajectory(nh_);
     global_frame_ = ref_traj_->getGlobalFrame();
     base_frame_   = ref_traj_->getBaseFrame();
-    double v_maxtrans = ref_traj_->getMaxVelocityLinear();
-    double v_maxrot   = ref_traj_->getMaxvelocityAngular();
-
-    int numX = X.numel(), numU = U.numel();
-
-    casadi::DM lbx = DM::zeros(numX + numU, 1);
-    lbx(Slice(0, numX, num_states_)) = -casadi::inf;
-    lbx(Slice(1, numX, num_states_)) = -casadi::inf;
-    lbx(Slice(2, numX, num_states_)) = -casadi::inf;
-
-    lbx(Slice(numX, numX + numU, num_controls_))     = -v_maxtrans;
-    lbx(Slice(numX + 1, numX + numU, num_controls_)) = -v_maxrot;
-
-    casadi::DM ubx = DM::zeros(numX + numU, 1);
-    ubx(Slice(0, numX, num_states_)) = casadi::inf;
-    ubx(Slice(1, numX, num_states_)) = casadi::inf;
-    ubx(Slice(2, numX, num_states_)) = casadi::inf;
-
-    ubx(Slice(numX, numX + numU, num_controls_))     = v_maxtrans;
-    ubx(Slice(numX + 1, numX + numU, num_controls_)) = v_maxrot;
-
-    args_["lbx"] = lbx;
-    args_["ubx"] = ubx;
-
-    DM lbg = DM::zeros(cst_.numel(), 1);
-    DM ubg = DM::zeros(cst_.numel(), 1);
-    ubg(Slice(numX, cst_.numel())) = casadi::inf;
-
-    args_["lbg"] = lbg;
-    args_["ubg"] = ubg;
 }
 
 SX MotionController::setObjective() {
@@ -299,28 +330,28 @@ SX closestDistance(const SX& P1, const SX& P2, const SX& Q) {
 }
 
 void MotionController::setCollisionConstraints(SX& cst) {
-    SX oriented_footprint = SX::zeros(2, unpadded_footprint_.size());
+    SX oriented_footprint = SX::zeros(2, padded_footprint_.size());
     int numXU = num_states_ * (N_horizon_ + 1) + num_controls_ * N_horizon_;
     int s =  2 * (N_maxvertices_ + 1);
     for(int i = 0; i < N_horizon_ + 1; i++) {
         SX x = X(Slice(), i);
-        transformFootprint(x, oriented_footprint, unpadded_footprint_);
+        transformFootprint(x, oriented_footprint, padded_footprint_);
         for(int n = 0; n < oriented_footprint.size2(); n++) {
             for(int j = 0; j < N_maxobs_; j++) {
                 SX polygon = reshape(P(Slice(numXU + (j) * s, numXU + (j + 1) * s)), 2, (N_maxvertices_ + 1));
-                double lamda = 50;
+
                 SX sum_exp = 0;
                 for (int k = 0; k < N_maxvertices_; k++) {
                     SX d_k = closestDistance(polygon(Slice(), k), polygon(Slice(), (k+1) % N_maxvertices_), oriented_footprint(Slice(), n));
-                    sum_exp += exp(-lamda * d_k);
+                    sum_exp += exp(-lamda_ * d_k);
                 }
-                cst = vertcat(cst, (-log(sum_exp) / lamda) - min_obstacle_distance_ - cir_radius_);
+                cst = vertcat(cst, (-log(sum_exp) / lamda_) - min_obstacle_distance_ - cir_radius_);
             }  
         }
     }
 }
 
-/* LinearConstraints
+#ifdef LinearConstraints
 SX computeLinearConstraints(const SX& poly) {
     int num_vertices = poly.size2() - 1;
     SX constraints = SX::zeros(3, num_vertices);   // a, b, c
@@ -351,10 +382,10 @@ SX computeLinearConstraints(const SX& poly) {
 }
 
 void MotionController::setCollisionConstraints(casadi::SX& cst) {
-    SX oriented_footprint = SX::zeros(2, unpadded_footprint_.size());
+    SX oriented_footprint = SX::zeros(2, padded_footprint_.size());
     for(int i = 0; i < N_horizon_; i++) {
         SX x = X(Slice(), i);
-        transformFootprint(x, oriented_footprint, unpadded_footprint_);
+        transformFootprint(x, oriented_footprint, padded_footprint_);
 
         int start = num_states_ * (N_horizon_ + 1) + num_controls_ * N_horizon_;
         int end = start + 2 * (N_maxvertices_ + 1);
@@ -373,7 +404,7 @@ void MotionController::setCollisionConstraints(casadi::SX& cst) {
         }
     }
 }
-*/
+#endif
 
 void MotionController::setKeepLaneConstraints(casadi::SX& cst) {
     for(int k = 1; k < N_horizon_; k++) {
@@ -426,16 +457,28 @@ bool MotionController::getRobotPose(double (&robot_pose_)[3]) {
     robot_pose.header.stamp = ros::Time();
     ros::Time current_time = ros::Time::now();
 
-    if (!tf_.canTransform(global_frame_, base_frame_, current_time, ros::Duration(0.1))) {
-        ROS_WARN("TF transform not available from %s to %s", base_frame_.c_str(), global_frame_.c_str());
+    try {
+        if(tf_.canTransform(global_frame_, base_frame_, current_time)) {
+            geometry_msgs::TransformStamped transform = tf_.lookupTransform(global_frame_, base_frame_, current_time);
+            tf2::doTransform(robot_pose, global_pose, transform);
+        }else {
+            tf_.transform(robot_pose, global_pose, global_frame_);
+        }
+    }catch (tf2::LookupException& ex) {
+        ROS_ERROR_THROTTLE(1.0, "No Transform available Error looking up robot pose: %s\n", ex.what());
+        return false;
+    }catch (tf2::ConnectivityException& ex) {
+        ROS_ERROR_THROTTLE(1.0, "Connectivity Error looking up robot pose: %s\n", ex.what());
+        return false;
+    }catch (tf2::ExtrapolationException& ex) {
+        ROS_ERROR_THROTTLE(1.0, "Extrapolation Error looking up robot pose: %s\n", ex.what());
         return false;
     }
-
-    try {
-        geometry_msgs::TransformStamped transform = tf_.lookupTransform(global_frame_, base_frame_, current_time);
-        tf2::doTransform(robot_pose, global_pose, transform);
-    }catch (tf2::TransformException& ex) {
-        ROS_ERROR_THROTTLE(1.0, "No Transform available Error looking up robot pose: %s\n", ex.what());
+    
+    if (!global_pose.header.stamp.isZero() && current_time.toSec() - global_pose.header.stamp.toSec() > transform_tolerance_) {
+        ROS_WARN_THROTTLE(1.0,
+                      "Transform timeout. Current time: %.4f, global_pose stamp: %.4f, tolerance: %.4f",
+                      current_time.toSec(), global_pose.header.stamp.toSec(), transform_tolerance_);
         return false;
     }
     robot_pose_[0] = global_pose.pose.position.x;
@@ -464,7 +507,6 @@ bool MotionController::loadFootprintFromParam(const std::string& param_name, std
             pt.z = 0.0;
             footprint.push_back(pt);
         }
-        deCompositionFootprint(footprint);
     }catch (const XmlRpc::XmlRpcException& ex) {
         ROS_ERROR("Error parsing footprint: %s", ex.getMessage().c_str());
         return false;
@@ -480,19 +522,15 @@ void MotionController::deCompositionFootprint(std::vector<geometry_msgs::Point>&
     for(int i = 0; i < (int)footprint.size(); i++) {
         if(footprint[i].x < xmin)
             xmin = footprint[i].x;
-        else if(footprint[i].x > xmax)
+        if(footprint[i].x > xmax)
             xmax = footprint[i].x;
         
         if(footprint[i].y < ymin)
             ymin = footprint[i].y;
-        else if(footprint[i].y > ymax)
+        if(footprint[i].y > ymax)
             ymax = footprint[i].y;
-        else {
-            ROS_WARN("Failed decomposition for footprint with sx x sy: %d x %d", sx, sy);
-            return;
-        }
     }
-
+    ROS_INFO("Decomposition for footprint with sx x sy: %d x %d", sx, sy);
     footprint.clear();
     double scale_x = (xmax - xmin) / sx;
     double scale_y = (ymax - ymin) / sy;
@@ -506,10 +544,11 @@ void MotionController::deCompositionFootprint(std::vector<geometry_msgs::Point>&
         }
     }
     cir_radius_ = sqrt(scale_x * scale_x + scale_y * scale_y) / 2;
+    ROS_INFO("Safety delta x: %.3f, delta y: %.3f", cir_radius_ - 0.5 * scale_x, cir_radius_ - 0.5 * scale_y);
 }
 
 void MotionController::transformFootprint(const casadi::SX& x, casadi::SX& oriented_footprint,
-                                       const std::vector<geometry_msgs::Point>& footprint_spec) {
+                                          const std::vector<geometry_msgs::Point>& footprint_spec) {
     SX cos_th = cos(x(2));
     SX sin_th = sin(x(2));
     for(int i = 0; i < (int)footprint_spec.size(); i++) {
@@ -518,6 +557,21 @@ void MotionController::transformFootprint(const casadi::SX& x, casadi::SX& orien
     }
 }
 
+void MotionController::padFootprintX(std::vector<geometry_msgs::Point>& footprint, double padding) {
+    for (unsigned int i = 0; i < footprint.size(); i++) {
+        geometry_msgs::Point& pt = footprint[i];
+        if(pt.x > 0)
+            pt.x += padding;
+        // pt.x += sign0(pt.x) * padding;
+    }
+}
+
+void MotionController::padFootprintY(std::vector<geometry_msgs::Point>& footprint, double padding) {
+  for (unsigned int i = 0; i < footprint.size(); i++) {
+    geometry_msgs::Point& pt = footprint[i];
+    pt.y += sign0(pt.y) * padding;
+  }
+}
 
 int main(int argc, char **argv) {
     ros::init(argc, argv, "vk_motion_controller");

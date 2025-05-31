@@ -19,7 +19,7 @@ Trajectory::Trajectory(ros::NodeHandle& nh_) {
     updated_ = false;
 
     traj_pub_ = nh_.advertise<nav_msgs::Path>("trajectory", 1);
-    path_sub_ = nh_.subscribe<nav_msgs::Path>("global_path", 1, &Trajectory::pathCallback, this);
+    path_sub_ = nh_.subscribe<nav_msgs::Path>("path", 1, &Trajectory::pathCallback, this);
 
     vel_profile_ = new NumericalVelocityProfile(v_start_, v_end_, anpha_, v_maxtrans_, v_maxrot_,
                                                 a_maxtrans_, a_maxrot_,
@@ -39,7 +39,7 @@ void Trajectory::pathCallback(const nav_msgs::PathConstPtr& msg) {
         geometry_msgs::PoseStamped pose_stamped;
         double t_end = uts->back().t;
         double t_start = uts->front().t;
-        double dt = 0.05;
+        double dt = 0.1;
         int N = (t_end - t_start) / dt;
         traj.header.frame_id = global_frame_;
         for(int i = 0; i <= N; i++) {
@@ -48,8 +48,7 @@ void Trajectory::pathCallback(const nav_msgs::PathConstPtr& msg) {
             traj.poses.push_back(pose_stamped);
         }
         traj_pub_.publish(traj);
-
-        // Set global goal
+        time_stamp_ = 0.0;
         getPose(nav_goal_, t_end);
         updated_ = true;
     }

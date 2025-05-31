@@ -2,6 +2,7 @@
 
 void QuinticBezierSpline::reset() {
     std::vector<Eigen::Vector2d>().swap(waypoints_);
+    std::vector<double>().swap(waypoint_orientations_);
     std::vector<std::array<Eigen::Vector2d, 6>>().swap(segments_);
     std::vector<double>().swap(arc_lengths_);
 }
@@ -10,11 +11,49 @@ bool QuinticBezierSpline::setWaypoints(const nav_msgs::Path& path) {
     if(!path.poses.empty()) {
         reset();
         num_waypoints_ = path.poses.size();
-        for(unsigned int i = 0; i < num_waypoints_; i++) {
-            waypoints_.emplace_back(path.poses[i].pose.position.x, path.poses[i].pose.position.y);
+        waypoints_.emplace_back(path.poses[0].pose.position.x,
+                                path.poses[0].pose.position.y);
+        waypoint_orientations_.emplace_back(tf2::getYaw(path.poses[0].pose.orientation));
+
+        double epsilon = 0.002;
+        for (unsigned int i = 1; i < num_waypoints_ - 1; i++) {
+            double x_prev = path.poses[i - 1].pose.position.x;
+            double y_prev = path.poses[i - 1].pose.position.y;
+            double x_curr = path.poses[i].pose.position.x;
+            double y_curr = path.poses[i].pose.position.y;
+            double x_next = path.poses[i + 1].pose.position.x;
+            double y_next = path.poses[i + 1].pose.position.y;
+
+            double vx_in = x_curr - x_prev;
+            double vy_in = y_curr - y_prev;
+            double len_in = std::hypot(vx_in, vy_in);
+            vx_in /= len_in; vy_in /= len_in;
+
+            double vx_out = x_next - x_curr;
+            double vy_out = y_next - y_curr;
+            double len_out = std::hypot(vx_out, vy_out);
+            vx_out /= len_out; vy_out /= len_out;
+
+            double x_rs = x_curr - epsilon * vx_in;
+            double y_rs = y_curr - epsilon * vy_in;
+
+            double x_re = x_curr + epsilon * vx_out;
+            double y_re = y_curr + epsilon * vy_out;
+
+            waypoints_.emplace_back(x_rs, y_rs);
+            waypoints_.emplace_back(x_curr, y_curr);
+            waypoints_.emplace_back(x_re, y_re);
+
+            double theta = tf2::getYaw(path.poses[i].pose.orientation);
+            waypoint_orientations_.emplace_back(theta);
         }
+
+        waypoints_.emplace_back(path.poses[num_waypoints_ - 1].pose.position.x,
+                                path.poses[num_waypoints_ - 1].pose.position.y);
+        waypoint_orientations_.emplace_back(tf2::getYaw(path.poses[num_waypoints_ - 1].pose.orientation));
+        num_waypoints_ = waypoints_.size();
         theta_start_ = tf2::getYaw(path.poses.front().pose.orientation);
-        theta_goal_ = tf2::getYaw(path.poses.back().pose.orientation);
+        theta_goal_  = tf2::getYaw(path.poses.back().pose.orientation);
         return true;
     }
     return false;
@@ -24,14 +63,7 @@ std::vector<double> QuinticBezierSpline::computeDistanceOfSegments() {
     std::vector<double> distanceOfSegments;
     for(unsigned int i = 0; i < num_waypoints_ - 1; i++) {
         double dist = (waypoints_[i] - waypoints_[i+1]).norm();
-        if(dist < 1e-3) {
-            ROS_WARN("Have two identical points: x = %.2f; y = %.2f", waypoints_[i][0], waypoints_[i][1]);
-            waypoints_.erase(waypoints_.begin() + i);
-            num_waypoints_ --;
-            i--;
-        }else {
-            distanceOfSegments.push_back(dist);
-        }
+        distanceOfSegments.push_back(dist);
     }
     return distanceOfSegments;
 }
@@ -41,22 +73,26 @@ std::vector<Eigen::Vector2d> QuinticBezierSpline::computeFirstDerivativeHeuristi
     if(!use_orientation_robot_) {
         // First waypoint
         first_derivatives[0] = scalingCoefficient_ * (waypoints_[1] - waypoints_[0]);
+
         // Last waypoint
         first_derivatives[num_waypoints_-1] = scalingCoefficient_ * (waypoints_[num_waypoints_-1] - waypoints_[num_waypoints_-2]);
     }else {
         first_derivatives[0] = { cos(theta_start_), sin(theta_start_) };
+        
         first_derivatives[num_waypoints_-1] = { cos(theta_goal_), sin(theta_goal_) };
     }
 
     // Inner waypoints
     for(unsigned int i = 1; i < num_waypoints_ - 1; i++) {
-        Eigen::Vector2d n1 = (waypoints_[i] - waypoints_[i-1]) / distanceOfSegments[i-1];
-        Eigen::Vector2d n2 = (waypoints_[i+1] - waypoints_[i]) / distanceOfSegments[i];
-        Eigen::Vector2d n = (n1 + n2).normalized(); // Bisector vector of n1 and n2
-        if(distanceOfSegments[i-1] < distanceOfSegments[i])
-            first_derivatives[i] = scalingCoefficient_ * distanceOfSegments[i-1] * n;
-        else
-            first_derivatives[i] = scalingCoefficient_ * distanceOfSegments[i] * n;
+        if(distanceOfSegments[i-1] < 1e-3 && distanceOfSegments[i] < 1e-3) {
+            first_derivatives[i] = Eigen::Vector2d::Zero();
+            continue;
+        }
+
+        Eigen::Vector2d n1 = (waypoints_[i] - waypoints_[i-1]) / std::max(1e-3, distanceOfSegments[i-1]);
+        Eigen::Vector2d n2 = (waypoints_[i+1] - waypoints_[i]) / std::max(1e-3, distanceOfSegments[i]);
+        Eigen::Vector2d n = (n1 + n2).normalized();
+        first_derivatives[i] = scalingCoefficient_ * std::min(distanceOfSegments[i-1], distanceOfSegments[i]) * n;
     }
     return first_derivatives;
 }
@@ -97,14 +133,24 @@ std::vector<Eigen::Vector2d> QuinticBezierSpline::computeSecondDerivativeHeurist
 
 std::array<Eigen::Vector2d, 6> QuinticBezierSpline::computeControlPointsOfSegment(Eigen::Vector2d& A, Eigen::Vector2d& tA, Eigen::Vector2d& aA,
                                                                                   Eigen::Vector2d& B, Eigen::Vector2d& tB, Eigen::Vector2d& aB) {
-    std::array<Eigen::Vector2d, 6> control_points;
-    control_points[0] = A;
-    control_points[1] = control_points[0] + tA / 5;
-    control_points[2] = -control_points[0] + 2.0 * control_points[1] + aA / 20;
+    std::array<Eigen::Vector2d, 6> control_points;                                                                               
+    if ((A - B).norm() < 1e-3) {
+        control_points[0] = A;
+        control_points[5] = B;
+    
+        control_points[1] = control_points[0] + tA;
+        control_points[2] = control_points[1] + aA;
+        control_points[4] = control_points[5] - tB;
+        control_points[3] = control_points[4] - aB;
+    } else {
+        control_points[0] = A;
+        control_points[1] = control_points[0] + tA / 5;
+        control_points[2] = -control_points[0] + 2.0 * control_points[1] + aA / 20;
 
-    control_points[5] = B;
-    control_points[4] = control_points[5] - tB / 5;
-    control_points[3] = -control_points[5] + 2 * control_points[4] + aB / 20;                                                        
+        control_points[5] = B;
+        control_points[4] = control_points[5] - tB / 5;
+        control_points[3] = -control_points[5] + 2 * control_points[4] + aB / 20;
+    }
     return control_points;
 }
 
@@ -126,7 +172,6 @@ void QuinticBezierSpline::generationSpline() {
     std::vector<Eigen::Vector2d> first_derivatives = computeFirstDerivativeHeuristics(distanceOfSegments);
     std::vector<Eigen::Vector2d> second_derivatives = computeSecondDerivativeHeuristics(distanceOfSegments, first_derivatives);
     for(unsigned int i = 0; i < num_waypoints_ - 1; i++) {
-        // ith segment
         std::array<Eigen::Vector2d, 6> control_points = computeControlPointsOfSegment(waypoints_[i], first_derivatives[i], second_derivatives[i],
                                                                                      waypoints_[i+1], first_derivatives[i+1], second_derivatives[i+1]);
         std::array<Eigen::Vector2d, 6> coefficients = computeCoefficientOfSegment(control_points);
@@ -174,7 +219,7 @@ double QuinticBezierSpline::rombergIntegrator(double a, double b, int index_segm
     for(int i = 1; i < max_step; i++) {
         h *= 0.5;
         c = 0;
-        eps = 1 << (i-1);   // 2^(i-1)
+        eps = 1 << (i-1);
         for(int j = 1; j <= eps; j++) {
             c += computeSpeedAtU(a + (2*j - 1) * h, index_segment);
         }

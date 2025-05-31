@@ -42,6 +42,10 @@ inline double norm2d(const Point1& pt1, const Point2& pt2) {
     return std::sqrt(std::pow(pt2.x - pt1.x, 2) + std::pow(pt2.y - pt1.y, 2));
 }
 
+inline double sign0(double x) {
+    return x < 0.0 ? -1.0 : (x > 0.0 ? 1.0 : 0.0);
+}
+
 class MotionController {
     public:
         MotionController(tf2_ros::Buffer& tf);
@@ -107,11 +111,16 @@ class MotionController {
         const int num_controls_ = 2;
         int N_horizon_, N_controls_, N_maxobs_, N_maxvertices_;
         double T_s_;
-        std::vector<geometry_msgs::Point> unpadded_footprint_;
+        std::vector<geometry_msgs::Point> padded_footprint_;
         std::vector<Polygon> obstacles_;
         double min_obstacle_distance_, cir_radius_;
         double max_error_position_, max_error_angle_;
         double width_lane_;
+        double lamda_;
+        double width_map_, height_map_;
+        double transform_tolerance_;
+        int sx_, sy_;
+        float footprint_padding_X_, footprint_padding_Y_;
 
         casadi::DM Q_;      // (x - x_ref)^T * Q_ * (x - x_ref)
         casadi::DM R_;      // (u - u_ref)^T * R_ * (u - u_ref)
@@ -144,11 +153,14 @@ class MotionController {
 
         bool loadFootprintFromParam(const std::string& param_name, std::vector<geometry_msgs::Point>& footprint);
 
-        void deCompositionFootprint(std::vector<geometry_msgs::Point>& footprint, int sx = 2, int sy = 2);
+        void deCompositionFootprint(std::vector<geometry_msgs::Point>& footprint, int sx, int sy);
 
         // Given a pose and base footprint, build the oriented footprint of the robot
         void transformFootprint(const casadi::SX& x, casadi::SX& oriented_footprint,
                                 const std::vector<geometry_msgs::Point>& footprint_spec);
+        
+        void padFootprintX(std::vector<geometry_msgs::Point>& footprint, double padding);
+        void padFootprintY(std::vector<geometry_msgs::Point>& footprint, double padding);
 
         bool ctrl_;
         bool updated_obstacles_;
