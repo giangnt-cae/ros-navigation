@@ -77,3 +77,12 @@ target_link_libraries(vk_costmap_2d
   ${catkin_LIBRARIES}
 )
 
+add_executable(test_node src/test_node.cpp
+)
+
+target_link_libraries(test_node
+  ${catkin_LIBRARIES}
+)
+
+add_dependencies(test_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+

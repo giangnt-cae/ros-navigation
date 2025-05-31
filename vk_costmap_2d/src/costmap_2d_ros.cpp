@@ -74,9 +74,9 @@ Costmap2DROS::Costmap2DROS(const std::string &name, tf2_ros::Buffer& tf) :
     layered_costmap_->setFootprint(padded_footprint_);
 
     // Add static layer
-    boost::shared_ptr<Layer> static_layer(new StaticLayer());
-    layered_costmap_->addLayer(static_layer);
-    static_layer->initialize(layered_costmap_, name + "/static_layer", &tf_);
+    // boost::shared_ptr<Layer> static_layer(new StaticLayer());
+    // layered_costmap_->addLayer(static_layer);
+    // static_layer->initialize(layered_costmap_, name + "/static_layer", &tf_);
 
     // Add obstacle layer from sensor data
     boost::shared_ptr<Layer> obstacle_layer(new ObstacleLayer());
@@ -194,7 +194,14 @@ bool Costmap2DROS::getRobotPose(geometry_msgs::PoseStamped& global_pose) const {
     }catch (tf2::LookupException& ex) {
         ROS_ERROR_THROTTLE(1.0, "No Transform available Error looking up robot pose: %s\n", ex.what());
         return false;
+    }catch (tf2::ConnectivityException& ex) {
+        ROS_ERROR_THROTTLE(1.0, "Connectivity Error looking up robot pose: %s\n", ex.what());
+        return false;
+    }catch (tf2::ExtrapolationException& ex) {
+        ROS_ERROR_THROTTLE(1.0, "Extrapolation Error looking up robot pose: %s\n", ex.what());
+        return false;
     }
+    
     if (!global_pose.header.stamp.isZero() && current_time.toSec() - global_pose.header.stamp.toSec() > transform_tolerance_) {
         ROS_WARN_THROTTLE(1.0,
                       "Costmap2DROS transform timeout. Current time: %.4f, global_pose stamp: %.4f, tolerance: %.4f",
