@@ -6,7 +6,7 @@
 #include "motion_model.hpp"
 #include "adaptivethreshold.hpp"
 
-static const std::string scan_topic = "scan1";
+static const std::string scan_topic = "scan_multi";
 
 class LocalizationNode {
     public:

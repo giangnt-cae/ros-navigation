@@ -1,11 +1,8 @@
 <?xml version="1.0"?>
 <launch>
-	<!-- <arg name="map_file" default="$(find vkbot)/map/vk_map.yaml"/>
-    <node name= "map_server" pkg= "map_server" type= "map_server" args="$(arg map_file)"/>
-	<node name= "rviz" pkg= "rviz" type= "rviz" args="-d $(find vk_localization)/vk_localization.rviz"/> -->
-    
-	<!-- <node name="vk_odometry" pkg="vk_odometry" type="vk_odometry" output="screen"/> -->
+
 	<node name="vk_localization" pkg="vk_localization" type="vk_localization" output="screen">
 		<param name = "log_level" value = "debug" />
 	</node>
+	
 </launch>
