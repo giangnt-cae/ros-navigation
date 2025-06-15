@@ -1,16 +1,30 @@
 #pragma once
 
 #include <ros/ros.h>
+#include <ros/time.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
+#include <tf2_ros/message_filter.h>
 #include <tf2/LinearMath/Transform.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2/convert.h>
 #include <tf2/utils.h>
+#include <tf2_sensor_msgs/tf2_sensor_msgs.h>
+
 #include <geometry_msgs/Twist.h>
 #include <geometry_msgs/PoseStamped.h>
+
+#include <sensor_msgs/LaserScan.h>
+#include <laser_geometry/laser_geometry.h>
+#include <sensor_msgs/PointCloud.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/point_cloud_conversion.h>
+#include <sensor_msgs/point_cloud2_iterator.h>
+#include <message_filters/subscriber.h>
+
+#include <boost/thread.hpp>
 
 #include <casadi/casadi.hpp>
 
@@ -111,16 +125,16 @@ class MotionController {
         const int num_controls_ = 2;
         int N_horizon_, N_controls_, N_maxobs_, N_maxvertices_;
         double T_s_;
-        std::vector<geometry_msgs::Point> padded_footprint_;
+        std::vector<geometry_msgs::Point> unpadded_footprint_, padded_footprint_;
         std::vector<Polygon> obstacles_;
         double min_obstacle_distance_, cir_radius_;
         double max_error_position_, max_error_angle_;
         double width_lane_;
-        double lamda_;
         double width_map_, height_map_;
         double transform_tolerance_;
         int sx_, sy_;
         float footprint_padding_X_, footprint_padding_Y_;
+        double eps_x_, eps_y_, eps_theta_;
 
         casadi::DM Q_;      // (x - x_ref)^T * Q_ * (x - x_ref)
         casadi::DM R_;      // (u - u_ref)^T * R_ * (u - u_ref)
@@ -140,7 +154,7 @@ class MotionController {
         void setKeepLaneConstraints(casadi::SX& cst);
 
         ros::NodeHandle nh_, private_nh_;
-        ros::Subscriber path_sub_, obstacle_sub_, foot_print_sub_;
+        ros::Subscriber obstacle_sub_;
         ros::Publisher vel_pub_, local_planner_pub_, reference_pub_;
 
         std::string global_frame_, base_frame_;
@@ -148,25 +162,33 @@ class MotionController {
 
         void obstacleCallback(const convert_polygon::ObstacleArrayMsg& msg);
 
+        void laserScanCallback(const sensor_msgs::LaserScanConstPtr& msg);
+
         // Filtering to get N_maxobs_
         void filterObstacles(double (&robot_pose)[3]);
 
         bool loadFootprintFromParam(const std::string& param_name, std::vector<geometry_msgs::Point>& footprint);
 
-        void deCompositionFootprint(std::vector<geometry_msgs::Point>& footprint, int sx, int sy);
+        std::vector<geometry_msgs::Point> deCompositionFootprint(std::vector<geometry_msgs::Point>& footprint, int sx, int sy);
 
         // Given a pose and base footprint, build the oriented footprint of the robot
         void transformFootprint(const casadi::SX& x, casadi::SX& oriented_footprint,
-                                const std::vector<geometry_msgs::Point>& footprint_spec);
+                                const std::vector<geometry_msgs::Point>& footprint);
         
         void padFootprintX(std::vector<geometry_msgs::Point>& footprint, double padding);
         void padFootprintY(std::vector<geometry_msgs::Point>& footprint, double padding);
 
-        bool ctrl_;
+        bool checkIsGoal(double (&robot_pose)[3]);
+
+        bool ctrl_, has_collision_;
         bool updated_obstacles_;
         bool avoidance_enable_, keep_lane_;
         std::mutex obstacles_mutex_;
         tf2_ros::Buffer& tf_;
 
         Trajectory* ref_traj_;
+        laser_geometry::LaserProjection projector_;
+        
+        boost::shared_ptr<message_filters::Subscriber<sensor_msgs::LaserScan>> laser_scan_sub_;
+        boost::shared_ptr<tf2_ros::MessageFilter<sensor_msgs::LaserScan>> filter_;
 };

@@ -6,8 +6,8 @@ Trajectory::Trajectory(ros::NodeHandle& nh_) {
     nh_.param("anpha", anpha_, 0.5);
     nh_.param("v_maxtrans", v_maxtrans_, 0.5);
     nh_.param("v_maxrot", v_maxrot_, 0.5);
-    nh_.param("a_maxtrans", a_maxtrans_, 0.25);
-    nh_.param("a_maxrot", a_maxrot_, 0.25);
+    nh_.param("a_maxtrans", a_maxtrans_, 0.5);
+    nh_.param("a_maxrot", a_maxrot_, 0.5);
     nh_.param("centrforce_max", centrforce_max_, 500.0);
     nh_.param("mass", mass_, 100.0);
     nh_.param("scalingCoefficient", scalingCoefficient_, 0.5);
@@ -28,7 +28,7 @@ Trajectory::Trajectory(ros::NodeHandle& nh_) {
 }
 
 void Trajectory::pathCallback(const nav_msgs::PathConstPtr& msg) {
-    ROS_INFO("Received new path.");
+    ROS_INFO("Received a new path!");
     std::lock_guard<std::mutex> lock(mtx_);
     if(spline_->setWaypoints(*msg)) {
         spline_->generationSpline();
@@ -49,6 +49,7 @@ void Trajectory::pathCallback(const nav_msgs::PathConstPtr& msg) {
         }
         traj_pub_.publish(traj);
         time_stamp_ = 0.0;
+        is_goal_ = false;
         getPose(nav_goal_, t_end);
         updated_ = true;
     }

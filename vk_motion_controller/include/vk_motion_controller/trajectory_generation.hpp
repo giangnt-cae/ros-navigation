@@ -32,6 +32,9 @@ class Trajectory {
         double getTimeStamp() { return time_stamp_; }
 
         void updateTimeStamp(double dt) { time_stamp_ += dt; }
+
+        bool getRobotIsGoal() { return is_goal_; }
+        void setRobotIsGoal(bool is_goal) { is_goal_ = is_goal; }
         
         ~Trajectory();
         
@@ -54,6 +57,7 @@ class Trajectory {
         bool updated_;
         geometry_msgs::Pose nav_goal_;
         double time_stamp_;
+        bool is_goal_;
 
         std::mutex mtx_;
 };

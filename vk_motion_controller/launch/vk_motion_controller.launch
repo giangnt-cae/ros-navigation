@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
 <launch>
-	<rosparam file="$(find vk_motion_controller)/config/parameters.yaml" command="load"/>
-	<node name="vk_motion_controller" pkg="vk_motion_controller" type="motion_controller" output="screen"/>
+	<node name="vk_motion_controller" pkg="vk_motion_controller" type="motion_controller" output="screen">
+		<rosparam file="$(find vk_motion_controller)/config/parameters.yaml" command="load"/>
+	</node>
 </launch>

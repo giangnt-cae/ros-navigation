@@ -35,6 +35,7 @@ endif()
 SET(CMAKE_EXE_LINKER_FLAGS 
     "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath -Wl,${CMAKE_SOURCE_DIR}/build")
 
+find_package(Eigen3 REQUIRED)
 # for using casadi
 find_package(casadi REQUIRED)
 
@@ -106,6 +107,8 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_msgs
   tf2_ros
   convert_polygon
+  laser_geometry
+  message_filters
 )
 
 catkin_package(
@@ -115,11 +118,13 @@ catkin_package(
   tf2_ros 
   tf2_geometry_msgs
   convert_polygon
+  laser_geometry
 )
 
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${Eigen_INCLUDE_DIRS}
 )
 
 add_executable(motion_controller src/motion_controller.cpp
@@ -131,4 +136,5 @@ add_executable(motion_controller src/motion_controller.cpp
 target_link_libraries(motion_controller
   ${catkin_LIBRARIES}
   ${CASADI_LIBRARIES} ipopt
+  ${Eigen_INCLUDE_DRIS}
 )

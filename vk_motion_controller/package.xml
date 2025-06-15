@@ -26,7 +26,8 @@
   <build_depend>tf2_ros</build_depend>
   <build_depend>tf2_geometry_msgs</build_depend>
   <build_depend>tf2_msgs</build_depend>
-
+  <build_depend>laser_geometry</build_depend>
+  <build_depend>message_filters</build_depend>
 
   <build_export_depend>geometry_msgs</build_export_depend>
   <build_export_depend>nav_msgs</build_export_depend>
@@ -38,6 +39,8 @@
   <build_export_depend>tf2_ros</build_export_depend>
   <build_export_depend>tf2_geometry_msgs</build_export_depend>
   <build_export_depend>tf2_msgs</build_export_depend>
+  <build_export_depend>laser_geometry</build_export_depend>
+  <build_export_depend>message_filters</build_export_depend>
 
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
@@ -49,9 +52,11 @@
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>tf2_geometry_msgs</exec_depend>
   <exec_depend>tf2_msgs</exec_depend>
+  <exec_depend>message_filters</exec_depend>
 
   <build_depend>convert_polygon</build_depend>
   <exec_depend>convert_polygon</exec_depend>
+  <exec_depend>laser_geometry</exec_depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

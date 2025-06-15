@@ -15,7 +15,7 @@ bool QuinticBezierSpline::setWaypoints(const nav_msgs::Path& path) {
                                 path.poses[0].pose.position.y);
         waypoint_orientations_.emplace_back(tf2::getYaw(path.poses[0].pose.orientation));
 
-        double epsilon = 0.002;
+        double epsilon = 1e-5;
         for (unsigned int i = 1; i < num_waypoints_ - 1; i++) {
             double x_prev = path.poses[i - 1].pose.position.x;
             double y_prev = path.poses[i - 1].pose.position.y;
@@ -52,6 +52,7 @@ bool QuinticBezierSpline::setWaypoints(const nav_msgs::Path& path) {
                                 path.poses[num_waypoints_ - 1].pose.position.y);
         waypoint_orientations_.emplace_back(tf2::getYaw(path.poses[num_waypoints_ - 1].pose.orientation));
         num_waypoints_ = waypoints_.size();
+        
         theta_start_ = tf2::getYaw(path.poses.front().pose.orientation);
         theta_goal_  = tf2::getYaw(path.poses.back().pose.orientation);
         return true;
@@ -71,18 +72,13 @@ std::vector<double> QuinticBezierSpline::computeDistanceOfSegments() {
 std::vector<Eigen::Vector2d> QuinticBezierSpline::computeFirstDerivativeHeuristics(std::vector<double>& distanceOfSegments) {
     std::vector<Eigen::Vector2d> first_derivatives(num_waypoints_);
     if(!use_orientation_robot_) {
-        // First waypoint
         first_derivatives[0] = scalingCoefficient_ * (waypoints_[1] - waypoints_[0]);
-
-        // Last waypoint
         first_derivatives[num_waypoints_-1] = scalingCoefficient_ * (waypoints_[num_waypoints_-1] - waypoints_[num_waypoints_-2]);
     }else {
         first_derivatives[0] = { cos(theta_start_), sin(theta_start_) };
-        
         first_derivatives[num_waypoints_-1] = { cos(theta_goal_), sin(theta_goal_) };
     }
 
-    // Inner waypoints
     for(unsigned int i = 1; i < num_waypoints_ - 1; i++) {
         if(distanceOfSegments[i-1] < 1e-3 && distanceOfSegments[i] < 1e-3) {
             first_derivatives[i] = Eigen::Vector2d::Zero();
@@ -110,15 +106,12 @@ Eigen::Vector2d QuinticBezierSpline::computeSecondDerivativeAtBeginPoint(Eigen::
 std::vector<Eigen::Vector2d> QuinticBezierSpline::computeSecondDerivativeHeuristics(std::vector<double>& distanceOfSegments,
                                                                                     std::vector<Eigen::Vector2d>& first_derivatives) {
     std::vector<Eigen::Vector2d> second_derivatives(num_waypoints_);
-    // First waypoint
     second_derivatives[0] = computeSecondDerivativeAtBeginPoint(waypoints_[0], first_derivatives[0],
                                                                 waypoints_[1], first_derivatives[1]);
 
-    // Last waypoint
     second_derivatives[num_waypoints_-1] = computeSecondDerivativeAtEndPoint(waypoints_[num_waypoints_-2], first_derivatives[num_waypoints_-2],
                                                                              waypoints_[num_waypoints_-1], first_derivatives[num_waypoints_-1]);
 
-    // Inner waypoints
     for(unsigned int i = 1; i < num_waypoints_ - 1; i++) {
         double a = distanceOfSegments[i] / (distanceOfSegments[i] + distanceOfSegments[i-1]);
         double b = distanceOfSegments[i-1] / (distanceOfSegments[i] + distanceOfSegments[i-1]);

@@ -10,8 +10,8 @@
 #include <tf2/convert.h>
 #include <tf2/utils.h>
 
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Core>
+#include <Eigen/Dense>
 
 class QuinticBezierSpline {
     public:
