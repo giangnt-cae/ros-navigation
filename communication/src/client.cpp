@@ -3,17 +3,15 @@
 AGVClient::AGVClient(tf2_ros::Buffer& tf)
 : tf_(tf), private_nh_("~"), socket_(io_context_)
 {   
-    agv_pub_ = nh_.advertise<vk_costmap_2d::AgvInfoArray>("agv_info", 10);
+    agv_pub_ = nh_.advertise<vk_costmap_2d::AgvInfoArray>("agvs_info", 10);
     private_nh_.param("base_frame", base_frame_, std::string("base_link"));
     private_nh_.param("global_frame", global_frame_, std::string("map"));
 
-    private_nh_.param("ID", agv_.id, std::string("AGV-1709"));
-    private_nh_.param("model", agv_.model, std::string(""));
-    private_nh_.param("state", agv_.state, std::string(""));
-    private_nh_.param("battery_level", agv_.battery_level, float(100.0));
-    private_nh_.param("length", agv_.length, float(0.5));
-    private_nh_.param("width", agv_.width, float(0.5));
-    private_nh_.param("height", agv_.height, float(0.5));
+    int temp_;
+    private_nh_.param("ID", temp_, 952);
+    agv_.id = temp_;
+    private_nh_.param("state", temp_, (int)381);
+    agv_.state = temp_;
 
     private_nh_.param("SERVER_PORT", server_port_, int(SERVER_PORT));
     private_nh_.param("SERVER_IP", server_ip_, std::string(SERVER_IP));
@@ -156,7 +154,7 @@ bool AGVClient::getRobotPose() {
         return false;
     }
 
-    agv_.current_pose = global_pose.pose;
+    agv_.robot_pose = global_pose;
     return true;
 }
 
