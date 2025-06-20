@@ -10,8 +10,7 @@ AGVClient::AGVClient(tf2_ros::Buffer& tf)
     int temp_;
     private_nh_.param("ID", temp_, 952);
     agv_.id = temp_;
-    private_nh_.param("state", temp_, (int)381);
-    agv_.state = temp_;
+    private_nh_.param("state", agv_.state, std::string(""));
 
     private_nh_.param("SERVER_PORT", server_port_, int(SERVER_PORT));
     private_nh_.param("SERVER_IP", server_ip_, std::string(SERVER_IP));
