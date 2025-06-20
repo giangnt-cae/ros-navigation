@@ -32,6 +32,8 @@ generate_messages(
   DEPENDENCIES
   std_msgs
   geometry_msgs
+  sensor_msgs
+  nav_msgs
 )
 
 catkin_package(
@@ -77,4 +79,9 @@ target_link_libraries(vk_costmap_2d
   ${catkin_LIBRARIES}
 )
 
+add_executable(mytest src/test.cpp)
+target_link_libraries(mytest
+  ${catkin_LIBRARIES}
+)
+add_dependencies(mytest ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 

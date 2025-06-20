@@ -186,8 +186,10 @@ void ObstacleLayer::updateBounds(double robot_x, double robot_y, double robot_ya
 }
 
 void ObstacleLayer::updateCosts(Costmap2D& master_grid, int min_i, int min_j, int max_i, int max_j) {
-    if (footprint_clearing_enabled_) {
+    if(footprint_clearing_enabled_) {
         setConvexPolygonCost(transformed_footprint_, FREE_SPACE);
+    }else {
+        setConvexPolygonCost(transformed_footprint_, LETHAL_OBSTACLE);
     }
 
     switch (combination_method_) {
@@ -366,7 +368,7 @@ void ObstacleLayer::updateRaytraceBounds(double ox, double oy, double wx, double
 void ObstacleLayer::updateFootprint(double robot_x, double robot_y, double robot_yaw,
                                     double* min_x, double* min_y,
                                     double* max_x, double* max_y) {
-    if(!footprint_clearing_enabled_) return;
+    // if(!footprint_clearing_enabled_) return;
     transformFootprint(robot_x, robot_y, robot_yaw, getFootprint(), transformed_footprint_);
     for (unsigned int i = 0; i < transformed_footprint_.size(); i++) {
         touch(transformed_footprint_[i].x, transformed_footprint_[i].y, min_x, min_y, max_x, max_y);

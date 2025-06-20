@@ -5,4 +5,5 @@
   
   <node pkg="convert_polygon" type="convert_polygon_node" name="convert_polygon" output="screen"/>
 
+  <node pkg="vk_costmap_2d" type="mytest" name="test" output="screen"/>
 </launch>

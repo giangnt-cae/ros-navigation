@@ -33,18 +33,22 @@ class AgvLayer : public CostmapLayer {
         virtual void updateCosts(Costmap2D& master_grid,
                                  int min_i, int min_j,
                                  int max_i, int max_j);
-        
+        int getID() const override { return id_; }
         boost::recursive_mutex agv_access_;
 
     private:
         void errorAgvInfoCallback(const AgvInfoArrayConstPtr& msg);
-        ros::Subscriber agv_sub_;
+        bool worldToMapOther(double wx, double wy, unsigned int& mx, unsigned int& my,
+                             double origin_x, double origin_y, double size_x, double size_y, double resolution);
+        std::vector<geometry_msgs::Point> getFootprint(const geometry_msgs::PolygonStamped& footprint);
+        ros::Subscriber agvs_sub_;
         double min_x_, min_y_, max_x_, max_y_;
         bool use_maximum_;
         bool agv_received_;
         bool rolling_window_;
-        std::vector<std::vector<geometry_msgs::Point>> polygons_;
-        std::string id_;
+        int id_;
+        int lethal_threshold_, unknown_cost_value_;
+        vk_costmap_2d::AgvInfoArray agv_arr;
 
 };  // AgvLayer class
 

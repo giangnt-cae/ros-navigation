@@ -49,6 +49,7 @@ class Layer {
 
         const std::vector<geometry_msgs::Point>& getFootprint() const;
         virtual void onFootprintChanged() {};
+        virtual int getID() const { return -1; }
 
         virtual ~Layer() {}
 

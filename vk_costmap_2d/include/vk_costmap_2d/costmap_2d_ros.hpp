@@ -15,7 +15,7 @@ namespace vk_costmap_2d {
 
 class Costmap2DROS {
     private:
-        ros::Publisher costmap_pub_;
+        ros::Publisher costmap_pub_, agv_pub_;
         nav_msgs::OccupancyGrid grid_;
         static char* cost_translation_table_;
         unsigned int x0_, xn_, y0_, yn_;
@@ -45,6 +45,8 @@ class Costmap2DROS {
         boost::thread* map_update_thread_;
         ros::NodeHandle private_nh;
         ros::NodeHandle nh;
+        
+        vk_costmap_2d::AgvInfo agv_;
 
         boost::recursive_mutex configuration_mutex_;
     public:

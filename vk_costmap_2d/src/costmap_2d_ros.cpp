@@ -69,6 +69,7 @@ Costmap2DROS::Costmap2DROS(const std::string &name, tf2_ros::Buffer& tf) :
 
     footprint_pub_ = private_nh.advertise<geometry_msgs::PolygonStamped>("footprint", 1);
     costmap_pub_ = private_nh.advertise<nav_msgs::OccupancyGrid>("costmap", 1);
+    agv_pub_ = private_nh.advertise<vk_costmap_2d::AgvInfo>("agv_info", 1);
 
     layered_costmap_ = new LayeredCostmap(global_frame_, rolling_window);
     layered_costmap_->setFootprint(padded_footprint_);
@@ -87,6 +88,7 @@ Costmap2DROS::Costmap2DROS(const std::string &name, tf2_ros::Buffer& tf) :
     boost::shared_ptr<Layer> agv_layer(new AgvLayer());
     layered_costmap_->addLayer(agv_layer);
     agv_layer->initialize(layered_costmap_, name + "/agv_layer", &tf_);
+    agv_.id = agv_layer->getID();
     
     // Add inflation layer
     boost::shared_ptr<Layer> inflation_layer(new InflationLayer());
@@ -157,6 +159,18 @@ void Costmap2DROS::publishCostmap() {
         grid_.data[i] = cost_translation_table_[data[i]];
     }
     costmap_pub_.publish(grid_);
+
+    auto layer = boost::dynamic_pointer_cast<vk_costmap_2d::CostmapLayer>(layered_costmap_->getLayers()->at(0));
+    if(layer) {
+        agv_.map.header = grid_.header;
+        agv_.map.info = grid_.info;
+        agv_.map.data.resize(grid_.data.size());
+        unsigned char* data = layer->getCharMap();
+        for (unsigned int i = 0; i < agv_.map.data.size(); i++) {
+            agv_.map.data[i] = cost_translation_table_[data[i]];
+        }
+    }
+    agv_pub_.publish(agv_);
 }
 
 void Costmap2DROS::updateMap() {
@@ -173,6 +187,9 @@ void Costmap2DROS::updateMap() {
         footprint.header.stamp = ros::Time::now();
         transformFootprint(x, y, yaw, padded_footprint_, footprint);
         footprint_pub_.publish(footprint);
+
+        agv_.robot_pose = pose;
+        agv_.footprint = footprint;
     }
 }
 

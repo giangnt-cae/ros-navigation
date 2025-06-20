@@ -3,8 +3,8 @@ base_frame: "base_link"
 rolling_window: true
 publish_rate: 10.0
 width:  10.0
-height: 10.0
-resolution: 0.03
+height: 5.0
+resolution: 0.02
 robot_radius: 0.5
 footprint_padding_X: 0.0
 footprint_padding_Y: 0.0
@@ -48,4 +48,4 @@ unpadded_footprint:
     y: -0.35
 
 costmap/agv_layer:
-  id: "AGV-1997"
+  id: 952
