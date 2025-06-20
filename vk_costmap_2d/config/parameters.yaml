@@ -11,8 +11,8 @@ footprint_padding_Y: 0.0
 
 costmap/obstacle_layer:
   observation_sources: "scan1 scan2"
-  obstacle_range: 5.0
-  raytrace_range: 5.0
+  obstacle_range: 4.0
+  raytrace_range: 6.0
   scan1:
     topic: "scan1"
     data_type: LaserScan
