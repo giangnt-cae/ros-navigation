@@ -7,8 +7,8 @@ void LocalizationNode::savePoseToServer() {
     tf2::Transform map_pose = latest_tf_.inverse() * odom_pose_tf2;
 
     double yaw = tf2::getYaw(map_pose.getRotation());
-    ROS_INFO("Saving pose to server. x: %.3f, y: %.3f", map_pose.getOrigin().x(),
-                                                        map_pose.getOrigin().y());
+    // ROS_INFO("Saving pose to server. x: %.3f, y: %.3f", map_pose.getOrigin().x(),
+    //                                                     map_pose.getOrigin().y());
     private_nh_.setParam("initial_pose_x", map_pose.getOrigin().x());
     private_nh_.setParam("initial_pose_y", map_pose.getOrigin().y());
     private_nh_.setParam("initial_pose_a", yaw);
@@ -174,7 +174,7 @@ void LocalizationNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser
                                        laser_pose.pose.position.y,
                                        0.0}; // laser mounting angle gets computed later -> set to 0.0 here!
         lasers_[laser_index]->SetLaserPose(laser_pose_);
-        ROS_INFO("Received laser's pose wrt robot: %.3f %3f %3f", laser_pose_[0], laser_pose_[1], laser_pose_[2]);
+        // ROS_INFO("Received laser's pose wrt robot: %.3f %3f %3f", laser_pose_[0], laser_pose_[1], laser_pose_[2]);
         frame_to_laser_[laser_scan_frame_id] = laser_index;
     } else {
         // we have the laser pose, retrieve laser index
@@ -253,7 +253,7 @@ void LocalizationNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser
         double angle_min = tf2::getYaw(min_q.quaternion);
         double angle_increment = tf2::getYaw(inc_q.quaternion) - angle_min;
         angle_increment = fmod(angle_increment + 5*M_PI, 2*M_PI) - M_PI;
-        ROS_INFO("Laser %d angles in base frame: min: %.3f inc: %.3f", laser_index, angle_min, angle_increment);
+        // ROS_INFO("Laser %d angles in base frame: min: %.3f inc: %.3f", laser_index, angle_min, angle_increment);
         
         // Apply range min/max thresholds, if the you supplied them
         if(laser_min_range_ > 0.0) {
@@ -313,7 +313,7 @@ void LocalizationNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser
         tf2::convert(q, p.pose.pose.orientation);
         pose_pub_.publish(p);
         last_published_pose = p;
-        ROS_INFO("New robot pose: %6.3f %6.3f %6.3f", robot_pose[0], robot_pose[1], robot_pose[2]);
+        // ROS_INFO("New robot pose: %6.3f %6.3f %6.3f", robot_pose[0], robot_pose[1], robot_pose[2]);
 
         // Subtracting base to odom from map to base and send map to odom instead
         geometry_msgs::PoseStamped odom_to_map;

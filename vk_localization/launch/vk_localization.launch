@@ -1,8 +1,7 @@
 <?xml version="1.0"?>
 <launch>
-
+	<include file="$(find ira_laser_tools)/launch/laserscan_multi_merger.launch" />
 	<node name="vk_localization" pkg="vk_localization" type="vk_localization" output="screen">
 		<param name = "log_level" value = "debug" />
 	</node>
-	
 </launch>
