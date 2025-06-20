@@ -9,7 +9,7 @@ unpadded_footprint:
     y: -0.35
 
 global_frame: "map"
-base_frame: "base_footprint"
+base_frame: "base_link"
 v_maxtrans: 0.2
 v_maxrot: 0.1
 a_maxtrans: 0.2

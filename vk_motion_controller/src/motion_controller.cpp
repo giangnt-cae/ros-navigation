@@ -184,7 +184,7 @@ void MotionController::init() {
     private_nh_.param("cir_radius", cir_radius_, 0.25);
     private_nh_.param("max_error_position", max_error_position_, 0.5);
     private_nh_.param("max_error_angle", max_error_angle_, M_PI / 6);
-    private_nh_.param("avoidance_enable", avoidance_enable_, false);
+    private_nh_.param("avoidance_enable", avoidance_enable_, true);
     private_nh_.param("keep_lane", keep_lane_, false);
     private_nh_.param("width_lane", width_lane_, 1.0);
     private_nh_.param("width_map", width_map_, 10.0);
@@ -425,7 +425,7 @@ bool MotionController::checkIsGoal(double (&robot_pose)[3]) {
 
 bool MotionController::loadFootprintFromParam(const std::string& param_name, std::vector<geometry_msgs::Point>& footprint) {
     XmlRpc::XmlRpcValue footprint_list;
-    if(!nh_.getParam(param_name, footprint_list) || footprint_list.getType() != XmlRpc::XmlRpcValue::TypeArray) {
+    if(!private_nh_.getParam(param_name, footprint_list) || footprint_list.getType() != XmlRpc::XmlRpcValue::TypeArray) {
         ROS_ERROR("Parameter %s is not a valid list!", param_name.c_str());
         return false;
     }
