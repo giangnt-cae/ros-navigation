@@ -76,8 +76,18 @@ Eigen::Matrix3d ScanMatcher::Registration(const std::vector<Eigen::Vector2d>& sc
     Eigen::Vector3d dx;
     for(int i = 0; i < max_iterations; i++) {
         GetCorrespondences(source, map, max_correspondence_distance, Corres);
+        if (Corres.empty()) {
+            ROS_WARN("No correspondences found in iteration %d", i);
+            break;
+        }
         BuildLinearSystem(Corres, kernel, JTJ, JTr);
         dx = JTJ.ldlt().solve(-JTr);
+
+        if (!dx.allFinite()) {
+            ROS_WARN("dx contains NaN or Inf! ICP terminated early.");
+            break;
+        }
+        
         deltaT = ConvertToHomogeneous(dx);
         TransformPoints(deltaT, source);
         T_icp = deltaT * T_icp;

@@ -34,6 +34,6 @@ void map_update_cspace(map_t *map, double max_occ_dist);    // Update the cspace
 #define MAP_GXWX(map, x) (floor((x - map->origin_x) / map->scale + 0.5) + map->size_x / 2)
 #define MAP_GYWY(map, y) (floor((y - map->origin_y) / map->scale + 0.5) + map->size_y / 2)
 
-#define MAP_VALID(map, i, j) ((i >= 0) && (i <= map->size_x) && (j >= 0) && (j <= map->size_y))
+#define MAP_VALID(map, i, j) ((i >= 0) && (i < map->size_x) && (j >= 0) && (j < map->size_y))
 
 #define MAP_INDEX(map, i, j) ((i) + (j) * map->size_x)

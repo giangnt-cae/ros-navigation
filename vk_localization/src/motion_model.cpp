@@ -65,7 +65,12 @@ Laser::Laser(int max_beams) {
 
 void Laser::computePointCloud(std::vector<Eigen::Vector2d>& points) {
     Eigen::Vector2d p;
-    int step = (range_count - 1) / (max_beams - 1);
+    int step;
+    if(range_count < max_beams) {
+        step = 1;
+    }else {
+        step = (range_count - 1) / (max_beams - 1);
+    }
     for(int i = 0; i < range_count; i += step) {
         if(ranges[i][0] >= range_max) continue;
         if(std::isnan(ranges[i][0])) continue;

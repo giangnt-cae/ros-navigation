@@ -7,8 +7,6 @@ void LocalizationNode::savePoseToServer() {
     tf2::Transform map_pose = latest_tf_.inverse() * odom_pose_tf2;
 
     double yaw = tf2::getYaw(map_pose.getRotation());
-    // ROS_INFO("Saving pose to server. x: %.3f, y: %.3f", map_pose.getOrigin().x(),
-    //                                                     map_pose.getOrigin().y());
     private_nh_.setParam("initial_pose_x", map_pose.getOrigin().x());
     private_nh_.setParam("initial_pose_y", map_pose.getOrigin().y());
     private_nh_.setParam("initial_pose_a", yaw);
@@ -121,7 +119,6 @@ map_t* LocalizationNode::convertMap(const nav_msgs::OccupancyGrid& msg) {
 bool LocalizationNode::getOdomPose(geometry_msgs::PoseStamped& odom_pose,
                                    double& x, double& y, double& yaw,
                                    const ros::Time& t, const std::string& f) {
-    // Get the robot's pose
     geometry_msgs::PoseStamped ident;
     ident.header.frame_id = stripSlash(f);
     ident.header.stamp = t;
@@ -144,7 +141,7 @@ void LocalizationNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser
     if(map_ == NULL) {
         return;
     }
-    
+
     boost::recursive_mutex::scoped_lock lr(configuration_mutex_);
     int laser_index = -1;
     
@@ -155,7 +152,7 @@ void LocalizationNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser
         lasers_.push_back(new Laser(*laser_));
         lasers_update_.push_back(true);
         laser_index = frame_to_laser_.size();
-        
+
         geometry_msgs::PoseStamped ident;
         ident.header.frame_id = laser_scan_frame_id;
         ident.header.stamp = ros::Time();
@@ -174,13 +171,13 @@ void LocalizationNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser
                                        laser_pose.pose.position.y,
                                        0.0}; // laser mounting angle gets computed later -> set to 0.0 here!
         lasers_[laser_index]->SetLaserPose(laser_pose_);
-        // ROS_INFO("Received laser's pose wrt robot: %.3f %3f %3f", laser_pose_[0], laser_pose_[1], laser_pose_[2]);
+        ROS_INFO("Received laser's pose wrt robot: %.3f %3f %3f", laser_pose_[0], laser_pose_[1], laser_pose_[2]);
         frame_to_laser_[laser_scan_frame_id] = laser_index;
     } else {
         // we have the laser pose, retrieve laser index
         laser_index = frame_to_laser_[laser_scan_frame_id];
     }
-
+    
     // where was the robot when this scan was taken?
     Eigen::Vector3d pose;
     if(!getOdomPose(latest_odom_pose_, pose[0], pose[1], pose[2],
@@ -276,7 +273,6 @@ void LocalizationNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser
             } else {
                 lasers_[laser_index]->ranges[i][0] = laser_scan->ranges[i];
             }
-            // Compute bearing
             lasers_[laser_index]->ranges[i][1] = angle_min + i * angle_increment;
         }
 
@@ -288,8 +284,9 @@ void LocalizationNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser
         // pointcloud in the local frame
         std::vector<Eigen::Vector2d> points;
         lasers_[laser_index]->computePointCloud(points);
+
+        delete [] lasers_[laser_index]->ranges;
         
-        // Scan matching filter using ICP scan to map
         Eigen::Matrix3d initial_guess = ConvertToHomogeneous(robot_pose);
         Eigen::Matrix3d T_t = sm_->Registration(points, map_, initial_guess, 3.0 * sigma, sigma / 3.0);
         Eigen::Matrix3d current_deviation = initial_guess.inverse() * T_t;
@@ -313,7 +310,6 @@ void LocalizationNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser
         tf2::convert(q, p.pose.pose.orientation);
         pose_pub_.publish(p);
         last_published_pose = p;
-        // ROS_INFO("New robot pose: %6.3f %6.3f %6.3f", robot_pose[0], robot_pose[1], robot_pose[2]);
 
         // Subtracting base to odom from map to base and send map to odom instead
         geometry_msgs::PoseStamped odom_to_map;
@@ -444,7 +440,7 @@ LocalizationNode::LocalizationNode() : sent_first_transform_(false),
     save_pose_period = ros::Duration(1.0 / tmp);
 
     private_nh_.param("laser_min_range", laser_min_range_, 0.05);
-    private_nh_.param("laser_max_range", laser_max_range_, 15.0);
+    private_nh_.param("laser_max_range", laser_max_range_, 25.0);
     private_nh_.param("laser_max_beams", max_beams_, 540);
 
     private_nh_.param("odom_model_type", odom_model_type_, std::string("diff"));
@@ -457,7 +453,7 @@ LocalizationNode::LocalizationNode() : sent_first_transform_(false),
     private_nh_.param("min_motion", min_motion_, 0.1);
 
     double tmp_tol;
-    private_nh_.param("transform_tolerance", tmp_tol, 0.2);
+    private_nh_.param("transform_tolerance", tmp_tol, 1.0);
     private_nh_.param("tf_broadcast", tf_broadcast_, true);
     private_nh_.param("force_update_after_initialpose", force_update_after_initialpose_, false);
     transform_tolerance_.fromSec(tmp_tol);
@@ -474,8 +470,8 @@ LocalizationNode::LocalizationNode() : sent_first_transform_(false),
 
     pose_pub_ = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("vklc_pose", 2, true);
 
-    laser_scan_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>(nh_, scan_topic, 100);
-    laser_scan_filter_ = new tf2_ros::MessageFilter<sensor_msgs::LaserScan>(*laser_scan_sub_, *tf_, odom_frame_id_, 100, nh_);
+    laser_scan_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>(nh_, scan_topic, 50);
+    laser_scan_filter_ = new tf2_ros::MessageFilter<sensor_msgs::LaserScan>(*laser_scan_sub_, *tf_, odom_frame_id_, 50, nh_);
     laser_scan_filter_->registerCallback(boost::bind(&LocalizationNode::laserReceived,
                                                      this, _1));
 

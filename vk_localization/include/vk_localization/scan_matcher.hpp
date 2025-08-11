@@ -26,18 +26,12 @@ class ScanMatcher {
                                double kernel,
                                Eigen::Matrix3d& JTJ,
                                Eigen::Vector3d& JTr);
-        int max_iterations = 500;
-        double epsilon = 1e-4;
+        int max_iterations = 50;
+        double epsilon = 1e-3;
     public:
         Eigen::Matrix3d Registration(const std::vector<Eigen::Vector2d>& scan,
                                      map_t *map,
                                      const Eigen::Matrix3d& initial_guess,
                                      double max_correspondence_distance,
                                      double kernel);
-        void compute_cov_mean_ICP(std::vector<Correspondence>& Corres,
-                                  Eigen::Vector2d& mean_ref,
-                                  Eigen::Vector2d& mean_cur,
-                                  Eigen::Matrix2d& H);
-        double compute_sum_error_ICP(std::vector<Correspondence>& Corres);
-        
 };
