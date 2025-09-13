@@ -1,21 +1,23 @@
 #include <vk_motion_controller/motion_controller.hpp>
 MotionController::MotionController(tf2_ros::Buffer& tf)
-    : Q_(DM::diagcat({5, 5, 2})),
-    R_(DM::diagcat({0.1, 0.1})),
-    W_(DM::diagcat({0.5, 0.5})),
-    Q_N_(DM::diagcat({10, 10, 5})),
+    : Q_(DM::diagcat({15, 15, 10})),
+    R_(DM::diagcat({0.05, 0.1})),
+    W_(DM::diagcat({2.0, 2.0})),
+    Q_N_(DM::diagcat({15, 15, 10})),
     tf_(tf),
     transform_tolerance_(0.5),
     ref_traj_(NULL),
     private_nh_("~")
 {   
     vel_pub_ = nh_.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
-    local_planner_pub_ = nh_.advertise<geometry_msgs::PoseArray>("local_planner", 10);
-    reference_pub_ = nh_.advertise<geometry_msgs::PoseArray>("references", 10);
-    obstacle_sub_ = nh_.subscribe("obstacles", 10, &MotionController::obstacleCallback, this);
-
+    local_planner_pub_ = nh_.advertise<geometry_msgs::PoseArray>("/local_planner", 10);
+    reference_pub_ = nh_.advertise<geometry_msgs::PoseArray>("/references", 10);
+    obstacle_sub_ = nh_.subscribe("/obstacles", 10, &MotionController::obstacleCallback, this);
+    
+    communication_pub_ = nh_.advertise<std_msgs::String>("/vk_commu", 2);
+    stop_signal_sub_ = nh_.subscribe("/stop_signal", 2, &MotionController::stopSignalCallback, this);
+    
     init();
-
     run();
 }
 
@@ -39,11 +41,8 @@ void MotionController::run() {
     while(ros::ok()) {
         ros::spinOnce();
         current_time = ros::Time::now();
-        if(ref_traj_->getUpdated() && getRobotPose(robot_pose) && !ref_traj_->getRobotIsGoal() && !has_collision_) {
-            if(checkIsGoal(robot_pose)) {
-                ref_traj_->setRobotIsGoal(true);
-                continue;
-            }
+        if(ref_traj_->getCtrl() && getRobotPose(robot_pose) && !has_collision_) {
+            if(checkIsGoal(robot_pose)) continue;
             
             dt = (current_time - last_time).toSec();
 
@@ -60,8 +59,8 @@ void MotionController::run() {
             if((double)norm_2(delta(Slice(0, 2))) < max_error_position_)
                 ref_traj_->updateTimeStamp(dt);
 
-            double x_min = robot_pose[0] - width_map_ / 2.0;
-            double x_max = robot_pose[0] + width_map_ / 2.0;
+            double x_min = robot_pose[0] - width_map_  / 2.0;
+            double x_max = robot_pose[0] + width_map_  / 2.0;
             double y_min = robot_pose[1] - height_map_ / 2.0;
             double y_max = robot_pose[1] + height_map_ / 2.0;
 
@@ -71,7 +70,7 @@ void MotionController::run() {
             lbx(Slice(2, numX, num_states_)) = -M_PI;
 
             lbx(Slice(numX, numX + numU, num_controls_))     = -ref_traj_->getMaxVelocityLinear();
-            lbx(Slice(numX + 1, numX + numU, num_controls_)) = -ref_traj_->getMaxvelocityAngular();
+            lbx(Slice(numX + 1, numX + numU, num_controls_)) = -ref_traj_->getMaxVelocityAngular();
 
             casadi::DM ubx = DM::zeros(numX + numU, 1);
             ubx(Slice(0, numX, num_states_)) = x_max;
@@ -79,13 +78,14 @@ void MotionController::run() {
             ubx(Slice(2, numX, num_states_)) = M_PI;
 
             ubx(Slice(numX, numX + numU, num_controls_))     = ref_traj_->getMaxVelocityLinear();
-            ubx(Slice(numX + 1, numX + numU, num_controls_)) = ref_traj_->getMaxvelocityAngular();
+            ubx(Slice(numX + 1, numX + numU, num_controls_)) = ref_traj_->getMaxVelocityAngular();
 
             args_["lbx"] = lbx;
             args_["ubx"] = ubx;
 
             casadi::DM lbg = DM::zeros(cst_.numel(), 1);
             casadi::DM ubg = DM::zeros(cst_.numel(), 1);
+
             #ifdef MaxVerticesFilter
             for(auto& polygon : obstacles_) {
                 polygon.filter(N_maxvertices_, robot_pose);
@@ -122,27 +122,29 @@ void MotionController::run() {
                                                {"lbg", args_["lbg"]},
                                                {"ubg", args_["ubg"]},
                                                {"p",   args_["p"]}});
-            
-            // std::map<std::string, casadi::GenericType> solver_stats = solver.stats();
-            // double total_wall_time = 0.0;
-            // for (const auto& kv : solver_stats) {
-            //     if (kv.first.find("t_wall_") == 0) {
-            //         total_wall_time += kv.second.as_double();
-            //     }
-            // }
-            // ROS_INFO("---> Total t_wall_* time: %.6f seconds", total_wall_time);
+            #ifdef TimeOptimization
+            std::map<std::string, casadi::GenericType> solver_stats = solver.stats();
+            double total_wall_time = 0.0;
+            for (const auto& kv : solver_stats) {
+                if (kv.first.find("t_wall_") == 0) {
+                    total_wall_time += kv.second.as_double();
+                }
+            }
+            ROS_INFO("---> Total t_wall_* time: %.6f seconds", total_wall_time);
+            #endif
 
             DM x_opt = (DM)res["x"];
             x0_      = x_opt(Slice(0, numX));
             u0_      = x_opt(Slice(numX, numX + numU));
             
-            // Velocity publish
+            #ifdef PublishVelocityCommand
             geometry_msgs::Twist ctrl_vel;
             ctrl_vel.linear.x =  (double)u0_(0);
             ctrl_vel.angular.z = (double)u0_(1);
             vel_pub_.publish(ctrl_vel);
+            #endif
 
-            // Local planner publish
+            #ifdef PublishLocalPlanner
             geometry_msgs::PoseArray local_path;
             local_path.header.frame_id = global_frame_;
             local_path.header.stamp = ros::Time::now();
@@ -154,8 +156,9 @@ void MotionController::run() {
                 local_path.poses.push_back(pose);
             }
             local_planner_pub_.publish(local_path);
+            #endif
 
-            // Reference trajectory publish
+            #ifdef PublishReferenceTrajectory
             geometry_msgs::PoseArray ref_path;
             ref_path.header.frame_id = global_frame_;
             ref_path.header.stamp = ros::Time::now();
@@ -168,6 +171,7 @@ void MotionController::run() {
                 ref_path.poses.push_back(pose);
             }
             reference_pub_.publish(ref_path);
+            #endif
         }
         last_time = current_time;
         rate.sleep();
@@ -175,16 +179,20 @@ void MotionController::run() {
 }
 
 void MotionController::init() {
+    private_nh_.getParam("Q", Qdiag_);
+    private_nh_.getParam("R", Rdiag_);
+    private_nh_.getParam("W", Wdiag_);
+    private_nh_.getParam("Q_N", Q_Ndiag_);
     private_nh_.param("horizon_size", N_horizon_, 15);
     private_nh_.param("horizon_control", N_controls_, 10);
-    private_nh_.param("max_obstacles", N_maxobs_, 10);
+    private_nh_.param("max_obstacles", N_maxobs_, 5);
     private_nh_.param("max_vertices", N_maxvertices_, 4);
     private_nh_.param("T_sample", T_s_, 0.5);
     private_nh_.param("min_obstacle_distance", min_obstacle_distance_, 0.05);
     private_nh_.param("cir_radius", cir_radius_, 0.25);
     private_nh_.param("max_error_position", max_error_position_, 0.5);
     private_nh_.param("max_error_angle", max_error_angle_, M_PI / 6);
-    private_nh_.param("avoidance_enable", avoidance_enable_, true);
+    private_nh_.param("avoidance_enable", avoidance_enable_, false);
     private_nh_.param("keep_lane", keep_lane_, false);
     private_nh_.param("width_lane", width_lane_, 1.0);
     private_nh_.param("width_map", width_map_, 10.0);
@@ -193,9 +201,14 @@ void MotionController::init() {
     private_nh_.param("sy", sy_, 2);
     private_nh_.param("footprint_padding_X", footprint_padding_X_, (float)0.1);
     private_nh_.param("footprint_padding_Y", footprint_padding_Y_, (float)0.0);
-    private_nh_.param("eps_x", eps_x_, 5e-2);
-    private_nh_.param("eps_y", eps_y_, 5e-2);
-    private_nh_.param("eps_theta", eps_theta_, 1e-2);
+    private_nh_.param("eps_x", eps_x_, 0.1);
+    private_nh_.param("eps_y", eps_y_, 0.1);
+    private_nh_.param("eps_theta", eps_theta_, M_PI / 18);
+
+    Q_   = casadi::DM::diagcat( {Qdiag_[0], Qdiag_[1], Qdiag_[2]} );
+    R_   = casadi::DM::diagcat( {Rdiag_[0], Rdiag_[1]} );
+    W_   = casadi::DM::diagcat( {Wdiag_[0], Wdiag_[1]} );
+    Q_N_ = casadi::DM::diagcat( {Q_Ndiag_[0], Q_Ndiag_[1], Q_Ndiag_[2]} );
 
     if (loadFootprintFromParam("unpadded_footprint", unpadded_footprint_)) {
         ROS_INFO("Successfully loaded unpadded footprint.");
@@ -417,9 +430,17 @@ bool MotionController::checkIsGoal(double (&robot_pose)[3]) {
         ctrl_vel.angular.z = 0.0;
         vel_pub_.publish(ctrl_vel);
         ROS_INFO("Robot has successfully reached the goal position at (x: %.2f, y: %.2f) with heading: %.2f radians.",
-                robot_pose[0], robot_pose[1], robot_pose[2]);
+                 robot_pose[0], robot_pose[1], robot_pose[2]);
+        
+        std_msgs::String response;
+        response.data = "avoid success";
+        communication_pub_.publish(response);
+
+        ref_traj_->setCtrl(false);
+        ref_traj_->setRobotIsGoal(true);
+
         return true;
-    };
+    }
     return false;
 }
 
@@ -528,16 +549,11 @@ void MotionController::laserScanCallback(const sensor_msgs::LaserScanConstPtr& m
     xmin = std::numeric_limits<double>::max();
     ymin = std::numeric_limits<double>::max();
     xmax = -xmin; ymax = -ymin;
-    for(int i = 0; i < (int)unpadded_footprint_.size(); i++) {
-        if(unpadded_footprint_[i].x < xmin)
-            xmin = unpadded_footprint_[i].x;
-        if(unpadded_footprint_[i].x > xmax)
-            xmax = unpadded_footprint_[i].x;
-        
-        if(unpadded_footprint_[i].y < ymin)
-            ymin = unpadded_footprint_[i].y;
-        if(unpadded_footprint_[i].y > ymax)
-            ymax = unpadded_footprint_[i].y;
+    for (auto& pt : unpadded_footprint_) {
+        xmin = std::min(xmin, pt.x);
+        xmax = std::max(xmax, pt.x);
+        ymin = std::min(ymin, pt.y);
+        ymax = std::max(ymax, pt.y);
     }
 
     double x_upper_bound, y_upper_bound, x_lower_bound, y_lower_bound;
@@ -562,6 +578,25 @@ void MotionController::laserScanCallback(const sensor_msgs::LaserScanConstPtr& m
             ROS_WARN("[Collision Warning] Potential obstacle detected ahead. Immediate attention required.");
             return;
         }
+    }
+}
+
+void MotionController::stopSignalCallback(const std_msgs::String& msg) {
+    if(msg.data == "stop") {
+        ROS_INFO("Stop request from SDV!");
+        geometry_msgs::Twist ctrl_vel;
+        ctrl_vel.linear.x  = 0.0;
+        ctrl_vel.angular.z = 0.0;
+        vel_pub_.publish(ctrl_vel);
+
+        std_msgs::String response;
+        if(ref_traj_->getCtrl())
+            response.data = "avoid failed";
+        else
+            response.data = "stop success";
+        communication_pub_.publish(response);
+
+        ref_traj_->setCtrl(false);
     }
 }
 

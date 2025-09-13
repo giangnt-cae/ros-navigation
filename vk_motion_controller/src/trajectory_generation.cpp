@@ -16,7 +16,7 @@ Trajectory::Trajectory(ros::NodeHandle& nh_) {
     nh_.param("global_frame", global_frame_, std::string("map"));
     nh_.param("base_frame", base_frame_, std::string("base_link"));
 
-    updated_ = false;
+    ctrl_ = false;
 
     traj_pub_ = nh_.advertise<nav_msgs::Path>("trajectory", 1);
     path_sub_ = nh_.subscribe<nav_msgs::Path>("path", 1, &Trajectory::pathCallback, this);
@@ -28,6 +28,11 @@ Trajectory::Trajectory(ros::NodeHandle& nh_) {
 }
 
 void Trajectory::pathCallback(const nav_msgs::PathConstPtr& msg) {
+    if (msg->poses.empty()) {
+        ROS_WARN("Received empty path!");
+        return;
+    }
+    
     ROS_INFO("Received a new path!");
     std::lock_guard<std::mutex> lock(mtx_);
     if(spline_->setWaypoints(*msg)) {
@@ -48,10 +53,14 @@ void Trajectory::pathCallback(const nav_msgs::PathConstPtr& msg) {
             traj.poses.push_back(pose_stamped);
         }
         traj_pub_.publish(traj);
-        time_stamp_ = 0.0;
-        is_goal_ = false;
+
+        resetTimeStamp();
+
+        setRobotIsGoal(false);
+
+        setCtrl(true);
+
         getPose(nav_goal_, t_end);
-        updated_ = true;
     }
 }
 
@@ -75,7 +84,6 @@ void Trajectory::getPose(geometry_msgs::Pose& pose, double t) {
     if(left == vel_profile_->getNumOfPoints())
         left -= 1;
 
-    // Noi suy t trong khoang [ti, tj]
     double ui = (*uts)[left - 1].u, uj = (*uts)[left].u;
     double ti = (*uts)[left - 1].t, tj = (*uts)[left].t;
     unsigned int k = (*uts)[left -1].index;
@@ -98,8 +106,9 @@ void Trajectory::getPose(geometry_msgs::Pose& pose, double t) {
 }
 
 void Trajectory::getPoseAndVelocity(double (&x)[5], double t) {
+    bool inverse_;
     std::vector<RefPoint>* uts = vel_profile_->getVelocityProfile();
-    if(t > uts->back().t)
+    if(t >= uts->back().t)
         t = uts->back().t;
     else if(t < uts->front().t)
         t = uts->front().t;
@@ -116,7 +125,6 @@ void Trajectory::getPoseAndVelocity(double (&x)[5], double t) {
     if(left == vel_profile_->getNumOfPoints())
         left -= 1;
 
-    // Noi suy t trong khoang [ti, tj]
     double ui = (*uts)[left - 1].u, uj = (*uts)[left].u;
     double ti = (*uts)[left - 1].t, tj = (*uts)[left].t;
     unsigned int k = (*uts)[left -1].index;

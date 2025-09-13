@@ -42,6 +42,7 @@ class QuinticBezierSpline {
     private:
         std::vector<Eigen::Vector2d> waypoints_;
         std::vector<double> waypoint_orientations_;                    // Waypoints from path planner
+        std::vector<int> move_heading_;
         std::vector<std::array<Eigen::Vector2d, 6>> segments_;      // The quintic polynomial coefficients of the segments 
         std::vector<double> arc_lengths_;
         double sum_length_;

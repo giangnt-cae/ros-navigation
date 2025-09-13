@@ -1,3 +1,25 @@
+global_frame: "map"
+base_frame: "base_link"
+v_maxtrans: 0.5
+v_maxrot: 0.1
+a_maxtrans: 0.5
+a_maxrot: 0.1
+
+Q: [15.0, 15.0, 10.0]
+R: [0.05, 0.1]
+W: [2.0, 2.0]
+Q_N: [15.0, 15.0, 10.0]
+horizon_size: 25
+horizon_control: 20
+T_sample: 0.2
+max_error_position: 0.2
+max_error_angle: 0.2
+footprint_padding_X: 0.1
+footprint_padding_Y: 0.0
+eps_x: 0.05
+eps_y: 0.05
+eps_theta: 0.2
+
 unpadded_footprint:
   - x: -0.41
     y: 0.35
@@ -8,20 +30,3 @@ unpadded_footprint:
   - x: -0.41
     y: -0.35
 
-global_frame: "map"
-base_frame: "base_link"
-v_maxtrans: 0.2
-v_maxrot: 0.1
-a_maxtrans: 0.2
-a_maxrot: 0.1
-
-horizon_size: 15
-horizon_control: 10
-T_sample: 0.5
-max_error_position: 0.5
-max_error_angle: 0.5
-footprint_padding_X: 0.2
-footprint_padding_Y: 0.0
-eps_x: 0.05
-eps_y: 0.05
-eps_theta: 0.01

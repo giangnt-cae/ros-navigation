@@ -3,58 +3,92 @@
 void QuinticBezierSpline::reset() {
     std::vector<Eigen::Vector2d>().swap(waypoints_);
     std::vector<double>().swap(waypoint_orientations_);
+    std::vector<int>().swap(move_heading_);
     std::vector<std::array<Eigen::Vector2d, 6>>().swap(segments_);
     std::vector<double>().swap(arc_lengths_);
 }
 
 bool QuinticBezierSpline::setWaypoints(const nav_msgs::Path& path) {
+    // if(!path.poses.empty()) {
+    //     reset();
+    //     num_waypoints_ = path.poses.size();
+    //     waypoints_.emplace_back(path.poses[0].pose.position.x,
+    //                             path.poses[0].pose.position.y);
+    //     waypoint_orientations_.emplace_back(tf2::getYaw(path.poses[0].pose.orientation));
+
+    //     double epsilon = 1e-5;
+    //     for (unsigned int i = 1; i < num_waypoints_ - 1; i++) {
+    //         double x_prev = path.poses[i - 1].pose.position.x;
+    //         double y_prev = path.poses[i - 1].pose.position.y;
+    //         double x_curr = path.poses[i].pose.position.x;
+    //         double y_curr = path.poses[i].pose.position.y;
+    //         double x_next = path.poses[i + 1].pose.position.x;
+    //         double y_next = path.poses[i + 1].pose.position.y;
+
+    //         double vx_in = x_curr - x_prev;
+    //         double vy_in = y_curr - y_prev;
+    //         double len_in = std::hypot(vx_in, vy_in);
+    //         vx_in /= len_in; vy_in /= len_in;
+
+    //         double vx_out = x_next - x_curr;
+    //         double vy_out = y_next - y_curr;
+    //         double len_out = std::hypot(vx_out, vy_out);
+    //         vx_out /= len_out; vy_out /= len_out;
+
+    //         double x_rs = x_curr - epsilon * vx_in;
+    //         double y_rs = y_curr - epsilon * vy_in;
+
+    //         double x_re = x_curr + epsilon * vx_out;
+    //         double y_re = y_curr + epsilon * vy_out;
+
+    //         waypoints_.emplace_back(x_rs, y_rs);
+    //         waypoints_.emplace_back(x_curr, y_curr);
+    //         waypoints_.emplace_back(x_re, y_re);
+
+    //         double theta = tf2::getYaw(path.poses[i].pose.orientation);
+    //         waypoint_orientations_.emplace_back(theta);
+    //     }
+
+    //     waypoints_.emplace_back(path.poses[num_waypoints_ - 1].pose.position.x,
+    //                             path.poses[num_waypoints_ - 1].pose.position.y);
+    //     waypoint_orientations_.emplace_back(tf2::getYaw(path.poses[num_waypoints_ - 1].pose.orientation));
+    //     num_waypoints_ = waypoints_.size();
+        
+    //     theta_start_ = tf2::getYaw(path.poses.front().pose.orientation);
+    //     theta_goal_  = tf2::getYaw(path.poses.back().pose.orientation);
+    //     return true;
+    // }
+    // return false;
+
     if(!path.poses.empty()) {
         reset();
         num_waypoints_ = path.poses.size();
-        waypoints_.emplace_back(path.poses[0].pose.position.x,
-                                path.poses[0].pose.position.y);
-        waypoint_orientations_.emplace_back(tf2::getYaw(path.poses[0].pose.orientation));
-
-        double epsilon = 1e-5;
-        for (unsigned int i = 1; i < num_waypoints_ - 1; i++) {
-            double x_prev = path.poses[i - 1].pose.position.x;
-            double y_prev = path.poses[i - 1].pose.position.y;
-            double x_curr = path.poses[i].pose.position.x;
-            double y_curr = path.poses[i].pose.position.y;
-            double x_next = path.poses[i + 1].pose.position.x;
-            double y_next = path.poses[i + 1].pose.position.y;
-
-            double vx_in = x_curr - x_prev;
-            double vy_in = y_curr - y_prev;
-            double len_in = std::hypot(vx_in, vy_in);
-            vx_in /= len_in; vy_in /= len_in;
-
-            double vx_out = x_next - x_curr;
-            double vy_out = y_next - y_curr;
-            double len_out = std::hypot(vx_out, vy_out);
-            vx_out /= len_out; vy_out /= len_out;
-
-            double x_rs = x_curr - epsilon * vx_in;
-            double y_rs = y_curr - epsilon * vy_in;
-
-            double x_re = x_curr + epsilon * vx_out;
-            double y_re = y_curr + epsilon * vy_out;
-
-            waypoints_.emplace_back(x_rs, y_rs);
-            waypoints_.emplace_back(x_curr, y_curr);
-            waypoints_.emplace_back(x_re, y_re);
-
+        for (unsigned int i = 0; i < num_waypoints_; i++) {
+            waypoints_.emplace_back(path.poses[i].pose.position.x,
+                                    path.poses[i].pose.position.y);
             double theta = tf2::getYaw(path.poses[i].pose.orientation);
             waypoint_orientations_.emplace_back(theta);
         }
-
-        waypoints_.emplace_back(path.poses[num_waypoints_ - 1].pose.position.x,
-                                path.poses[num_waypoints_ - 1].pose.position.y);
-        waypoint_orientations_.emplace_back(tf2::getYaw(path.poses[num_waypoints_ - 1].pose.orientation));
-        num_waypoints_ = waypoints_.size();
         
-        theta_start_ = tf2::getYaw(path.poses.front().pose.orientation);
-        theta_goal_  = tf2::getYaw(path.poses.back().pose.orientation);
+        int last_heading = 0;
+        for (unsigned int i = 0; i < waypoints_.size() - 1; i++) {
+            Eigen::Vector2d d = waypoints_[i + 1] - waypoints_[i];
+            Eigen::Vector2d heading(cos(waypoint_orientations_[i]), sin(waypoint_orientations_[i]));
+            double dot = d.dot(heading);
+
+            int current_heading = (dot < 0) ? -1 : 1;
+            if (i > 0 && current_heading != last_heading) {
+                Eigen::Vector2d temp_point = waypoints_[i] + 1e-4 * d / d.norm();
+                double temp_theta = waypoint_orientations_[i+1];
+                waypoints_.insert(waypoints_.begin() + (i+1), temp_point);
+                waypoint_orientations_.insert(waypoint_orientations_.begin() + (i+1), temp_theta);
+                num_waypoints_ += 1;
+            }
+            move_heading_.emplace_back(current_heading);
+            last_heading = current_heading;
+        }
+        theta_start_ = waypoint_orientations_.front();
+        theta_goal_  = waypoint_orientations_.back();
         return true;
     }
     return false;
@@ -72,8 +106,16 @@ std::vector<double> QuinticBezierSpline::computeDistanceOfSegments() {
 std::vector<Eigen::Vector2d> QuinticBezierSpline::computeFirstDerivativeHeuristics(std::vector<double>& distanceOfSegments) {
     std::vector<Eigen::Vector2d> first_derivatives(num_waypoints_);
     if(!use_orientation_robot_) {
-        first_derivatives[0] = scalingCoefficient_ * (waypoints_[1] - waypoints_[0]);
-        first_derivatives[num_waypoints_-1] = scalingCoefficient_ * (waypoints_[num_waypoints_-1] - waypoints_[num_waypoints_-2]);
+        // first_derivatives[0] = scalingCoefficient_ * (waypoints_[1] - waypoints_[0]);
+        // first_derivatives[num_waypoints_-1] = scalingCoefficient_ * (waypoints_[num_waypoints_-1] - waypoints_[num_waypoints_-2]);
+
+        Eigen::Vector2d delta = scalingCoefficient_ * (waypoints_[1] - waypoints_[0]);
+        first_derivatives[0] = delta.norm() * move_heading_.front() *
+                               Eigen::Vector2d{ std::cos(theta_start_), std::sin(theta_start_) };
+
+        delta = scalingCoefficient_ * (waypoints_[num_waypoints_-1] - waypoints_[num_waypoints_-2]);
+        first_derivatives[num_waypoints_-1] = delta.norm() * move_heading_.back() *
+                                              Eigen::Vector2d{ std::cos(theta_goal_), std::sin(theta_goal_) } ;
     }else {
         first_derivatives[0] = { cos(theta_start_), sin(theta_start_) };
         first_derivatives[num_waypoints_-1] = { cos(theta_goal_), sin(theta_goal_) };
@@ -85,10 +127,15 @@ std::vector<Eigen::Vector2d> QuinticBezierSpline::computeFirstDerivativeHeuristi
             continue;
         }
 
-        Eigen::Vector2d n1 = (waypoints_[i] - waypoints_[i-1]) / std::max(1e-3, distanceOfSegments[i-1]);
-        Eigen::Vector2d n2 = (waypoints_[i+1] - waypoints_[i]) / std::max(1e-3, distanceOfSegments[i]);
-        Eigen::Vector2d n = (n1 + n2).normalized();
-        first_derivatives[i] = scalingCoefficient_ * std::min(distanceOfSegments[i-1], distanceOfSegments[i]) * n;
+        // Eigen::Vector2d n1 = (waypoints_[i] - waypoints_[i-1]) / std::max(1e-3, distanceOfSegments[i-1]);
+        // Eigen::Vector2d n2 = (waypoints_[i+1] - waypoints_[i]) / std::max(1e-3, distanceOfSegments[i]);
+        // Eigen::Vector2d n = (n1 + n2).normalized();
+        // first_derivatives[i] = scalingCoefficient_ * std::min(distanceOfSegments[i-1], distanceOfSegments[i]) * n;
+
+        first_derivatives[i] = scalingCoefficient_ * std::min(distanceOfSegments[i-1], distanceOfSegments[i]) * 
+                               Eigen::Vector2d(cos(waypoint_orientations_[i]), sin(waypoint_orientations_[i]));
+        first_derivatives[i] *= move_heading_[i];
+
     }
     return first_derivatives;
 }
@@ -138,7 +185,7 @@ std::array<Eigen::Vector2d, 6> QuinticBezierSpline::computeControlPointsOfSegmen
     } else {
         control_points[0] = A;
         control_points[1] = control_points[0] + tA / 5;
-        control_points[2] = -control_points[0] + 2.0 * control_points[1] + aA / 20;
+        control_points[2] = -control_points[0] + 2 * control_points[1] + aA / 20;
 
         control_points[5] = B;
         control_points[4] = control_points[5] - tB / 5;
@@ -258,6 +305,7 @@ void QuinticBezierSpline::getState(double& x, double& y, double& theta, double u
     
     x = q[0];
     y = q[1];
+    q_dot *= move_heading_[index_segment];
     theta = atan2(q_dot[1], q_dot[0]);
 }
 
@@ -279,6 +327,7 @@ void QuinticBezierSpline::getState(double (&x)[5], double u, double u_dot, int i
     double denominator = pow(q_dot.norm(), 3);
     double c = (denominator > 1e-8) ? (numerator / denominator) : 0.0;
     
+    q_dot *= move_heading_[index_segment];
     x[0] = q[0];
     x[1] = q[1];
     x[2] = atan2(q_dot[1], q_dot[0]);

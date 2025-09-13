@@ -15,7 +15,7 @@ class Trajectory {
         std::string getBaseFrame() { return base_frame_; }
 
         double getMaxVelocityLinear() { return v_maxtrans_; }
-        double getMaxvelocityAngular() { return v_maxrot_; }
+        double getMaxVelocityAngular() { return v_maxrot_; }
 
         // Reference pose at time t (x, y, theta)
         void getPose(geometry_msgs::Pose& pose, double t);
@@ -23,13 +23,15 @@ class Trajectory {
         // Reference state at time t (x, y, theta, v, w)
         void getPoseAndVelocity(double (&x)[5], double t);
 
-        bool getUpdated() { return updated_; }
+        bool getCtrl() { return ctrl_; }
 
-        void setUpdated(bool updated) { updated_ = updated; }
+        void setCtrl(bool ctrl) { ctrl_ = ctrl; }
 
         geometry_msgs::Pose getGlobalGoal() { return nav_goal_; }
 
         double getTimeStamp() { return time_stamp_; }
+
+        void resetTimeStamp() { time_stamp_ = 0.0; }
 
         void updateTimeStamp(double dt) { time_stamp_ += dt; }
 
@@ -54,7 +56,7 @@ class Trajectory {
         double scalingCoefficient_;
         bool use_orientation_robot_;
         std::string global_frame_, base_frame_;
-        bool updated_;
+        bool ctrl_;
         geometry_msgs::Pose nav_goal_;
         double time_stamp_;
         bool is_goal_;

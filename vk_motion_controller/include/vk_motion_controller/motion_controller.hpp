@@ -16,6 +16,7 @@
 #include <geometry_msgs/Twist.h>
 #include <geometry_msgs/PoseStamped.h>
 
+#include <std_msgs/String.h>
 #include <sensor_msgs/LaserScan.h>
 #include <laser_geometry/laser_geometry.h>
 #include <sensor_msgs/PointCloud.h>
@@ -34,6 +35,12 @@
 
 #include <XmlRpcValue.h>
 #include <XmlRpcException.h>
+
+#define MaxVerticesFilter
+#define TimeOptimization
+#define PublishVelocityCommand
+#define PublishLocalPlanner
+#define PublishReferenceTrajectory
 
 using namespace casadi;
 
@@ -140,6 +147,7 @@ class MotionController {
         casadi::DM R_;      // (u - u_ref)^T * R_ * (u - u_ref)
         casadi::DM W_;      // (u_k+1 - u_k)^T * W_ * (u_k+1 - u_k)
         casadi::DM Q_N_;    // (x_N - x_Nref)^T * Q_N_ * (x_N - x_Nref)
+        std::vector<double> Qdiag_, Rdiag_, Wdiag_, Q_Ndiag_;
 
         casadi::SX obj_, cst_;
         casadi::DMDict args_;
@@ -157,12 +165,17 @@ class MotionController {
         ros::Subscriber obstacle_sub_;
         ros::Publisher vel_pub_, local_planner_pub_, reference_pub_;
 
+        ros::Subscriber stop_signal_sub_;
+        ros::Publisher communication_pub_;
+
         std::string global_frame_, base_frame_;
         bool getRobotPose(double (&robot_pose)[3]);
 
         void obstacleCallback(const convert_polygon::ObstacleArrayMsg& msg);
 
         void laserScanCallback(const sensor_msgs::LaserScanConstPtr& msg);
+
+        void stopSignalCallback(const std_msgs::String& msg);
 
         // Filtering to get N_maxobs_
         void filterObstacles(double (&robot_pose)[3]);
@@ -179,7 +192,7 @@ class MotionController {
         void padFootprintY(std::vector<geometry_msgs::Point>& footprint, double padding);
 
         bool checkIsGoal(double (&robot_pose)[3]);
-
+        
         bool ctrl_, has_collision_;
         bool updated_obstacles_;
         bool avoidance_enable_, keep_lane_;
