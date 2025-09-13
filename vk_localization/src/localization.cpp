@@ -431,7 +431,7 @@ LocalizationNode::LocalizationNode() : sent_first_transform_(false),
 
     // Get params off the param server
     private_nh_.param("use_map_topic", use_map_topic_, false);
-    private_nh_.param("first_map_only", first_map_only_, false);
+    private_nh_.param("first_map_only", first_map_only_, true);
 
     double tmp;
     private_nh_.param("gui_publish_rate", tmp, -1.0);
