@@ -46,6 +46,8 @@ class Costmap2D {
     
     virtual void updateOrigin(double new_origin_x, double new_origin_y);
 
+    virtual void updateOriginAndResize(double new_origin_x, double new_origin_y, unsigned int new_size_x, unsigned int new_size_y);
+
     unsigned int getSizeInCellsX() const { return size_x_; }
     unsigned int getSizeInCellsY() const { return size_y_; }
     double getResolution() const { return resolution_; }

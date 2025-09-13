@@ -132,8 +132,12 @@ void ObstacleLayer::onInitialize() {
 
 void ObstacleLayer::updateBounds(double robot_x, double robot_y, double robot_yaw, double* min_x,
                                  double* min_y, double* max_x, double* max_y) {
-    if(rolling_window_)
-        updateOrigin(robot_x -getSizeInMetersX() / 2, robot_y - getSizeInMetersY() / 2);
+    if(rolling_window_) {
+        Costmap2D* master_costmap = layered_costmap_->getCostmap();
+        updateOriginAndResize(master_costmap->getOriginX(), master_costmap->getOriginY(),
+                              master_costmap->getSizeInCellsX(), master_costmap->getSizeInCellsY());
+    }
+    
     bool updated = true;
     std::vector<Observation> observations, clearing_observations;
 

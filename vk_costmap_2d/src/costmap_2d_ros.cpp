@@ -74,31 +74,27 @@ Costmap2DROS::Costmap2DROS(const std::string &name, tf2_ros::Buffer& tf) :
     layered_costmap_ = new LayeredCostmap(global_frame_, rolling_window);
     layered_costmap_->setFootprint(padded_footprint_);
 
-    // Add static layer
-    // boost::shared_ptr<Layer> static_layer(new StaticLayer());
-    // layered_costmap_->addLayer(static_layer);
-    // static_layer->initialize(layered_costmap_, name + "/static_layer", &tf_);
-
-    // Add obstacle layer from sensor data
+    #ifdef STATIC_LAYER
+    boost::shared_ptr<Layer> static_layer(new StaticLayer());
+    layered_costmap_->addLayer(static_layer);
+    static_layer->initialize(layered_costmap_, name + "/static_layer", &tf_);
+    #endif
+    
     boost::shared_ptr<Layer> obstacle_layer(new ObstacleLayer());
     layered_costmap_->addLayer(obstacle_layer);
     obstacle_layer->initialize(layered_costmap_, name + "/obstacle_layer", &tf_);
     
-    // Add AGV layer
     boost::shared_ptr<Layer> agv_layer(new AgvLayer());
     layered_costmap_->addLayer(agv_layer);
     agv_layer->initialize(layered_costmap_, name + "/agv_layer", &tf_);
     agv_.id = agv_layer->getID();
     
-    // Add inflation layer
     boost::shared_ptr<Layer> inflation_layer(new InflationLayer());
     layered_costmap_->addLayer(inflation_layer);
     inflation_layer->initialize(layered_costmap_, name + "/inflation_layer", &tf_);
 
-    if(!layered_costmap_->isSizeLocked()) {
-        layered_costmap_->resizeMap((unsigned int)(width_/resolution_), (unsigned int)(height_/resolution_),
-                                    resolution_, origin_x_, origin_y_);
-    }
+    layered_costmap_->resizeMap((unsigned int)(width_/resolution_), (unsigned int)(height_/resolution_),
+                                resolution_, origin_x_, origin_y_);
     
     if(publish_rate > 0) {
         publish_cycle = ros::Duration(1.0/publish_rate);
@@ -179,13 +175,20 @@ void Costmap2DROS::updateMap() {
         double x = pose.pose.position.x,
                y = pose.pose.position.y,
                yaw = tf2::getYaw(pose.pose.orientation);
-        
-        layered_costmap_->updateMap(x, y, yaw);
+               
+        if(std::fabs(width_ - height_) > 0) {
+            if(std::fabs(std::tan(yaw)) < std::fabs(std::tan(M_PI / 20)) && width_ < height_) {
+                std::swap(width_, height_);
+            }else if (std::fabs(std::tan(yaw)) > 1.0 / std::fabs(std::tan(M_PI / 20)) && width_ > height_) {
+                std::swap(width_, height_);
+            }
+        }
+        layered_costmap_->updateMap(x, y, yaw, width_, height_);
     
         geometry_msgs::PolygonStamped footprint;
         footprint.header.frame_id = global_frame_;
         footprint.header.stamp = ros::Time::now();
-        transformFootprint(x, y, yaw, padded_footprint_, footprint);
+        transformFootprint(x, y, yaw, unpadded_footprint_, footprint);
         footprint_pub_.publish(footprint);
 
         agv_.robot_pose = pose;

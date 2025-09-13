@@ -178,6 +178,61 @@ void Costmap2D::updateOrigin(double new_origin_x, double new_origin_y) {
     delete [] local_map;
 }
 
+void Costmap2D::updateOriginAndResize(double new_origin_x, double new_origin_y,
+                                      unsigned int new_size_x, unsigned int new_size_y) {
+    if(new_size_x == size_x_ && new_size_y == size_y_) {
+        updateOrigin(new_origin_x, new_origin_y);
+        return;
+    }
+    int cell_ox, cell_oy;
+    cell_ox = int((new_origin_x - origin_x_) / resolution_);
+    cell_oy = int((new_origin_y - origin_y_) / resolution_);
+    if (cell_ox == 0 && cell_oy == 0) return;
+
+    double new_grid_ox, new_grid_oy;
+    new_grid_ox = origin_x_ + cell_ox * resolution_;
+    new_grid_oy = origin_y_ + cell_oy * resolution_;
+
+    unsigned int old_size_x = size_x_;
+    unsigned int old_size_y = size_y_;
+    double old_origin_x = origin_x_;
+    double old_origin_y = origin_y_;
+
+    size_x_ = new_size_x;
+    size_y_ = new_size_y;
+    origin_x_ = new_grid_ox;
+    origin_y_ = new_grid_oy;
+
+    double x_overlap_min = std::max(old_origin_x, origin_x_);
+    double y_overlap_min = std::max(old_origin_y, origin_y_);
+    double x_overlap_max = std::min(old_origin_x + old_size_x * resolution_,
+                                    origin_x_ + size_x_ * resolution_);
+    double y_overlap_max = std::min(old_origin_y + old_size_y * resolution_,
+                                    origin_y_ + size_y_ * resolution_);
+    if(x_overlap_max <= x_overlap_min || y_overlap_max <= y_overlap_min)
+        return;
+
+    int copy_size_x = (x_overlap_max - x_overlap_min) / resolution_;
+    int copy_size_y = (y_overlap_max - y_overlap_min) / resolution_;
+
+    unsigned char* local_map = new unsigned char[copy_size_x * copy_size_y];
+    int copy_start_old_x = (x_overlap_min - old_origin_x) / resolution_;
+    int copy_start_old_y = (y_overlap_min - old_origin_y) / resolution_;
+    copyMapRegion(costmap_, copy_start_old_x, copy_start_old_y, old_size_x,
+                  local_map, 0, 0, copy_size_x,
+                  copy_size_x, copy_size_y);
+    
+    costmap_ = new unsigned char[size_x_ * size_y_];
+    resetFullMap();
+    int copy_start_new_x = (x_overlap_min - origin_x_) / resolution_;
+    int copy_start_new_y = (y_overlap_min - origin_y_) / resolution_;
+    copyMapRegion(local_map, 0, 0, copy_size_x,
+                  costmap_, copy_start_new_x, copy_start_new_y, size_x_,
+                  copy_size_x, copy_size_y);
+
+    delete[] local_map;
+}
+
 unsigned char Costmap2D::getCost(unsigned int mx, unsigned int my) const {
     return  costmap_[getIndex(mx, my)];
 }

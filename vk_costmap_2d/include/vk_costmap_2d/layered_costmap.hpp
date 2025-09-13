@@ -32,7 +32,7 @@ class LayeredCostmap {
         LayeredCostmap(std::string global_frame, bool rolling_window);
         ~LayeredCostmap();
 
-        void updateMap(double robot_x, double robot_y, double robot_yaw);
+        void updateMap(double robot_x, double robot_y, double robot_yaw, double width, double height);
 
         void resizeMap(unsigned int size_x, unsigned int size_y, double resolution,
                        double origin_x, double origin_y, bool size_locked = false);

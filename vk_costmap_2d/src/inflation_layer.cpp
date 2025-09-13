@@ -39,8 +39,8 @@ void InflationLayer::matchSize() {
     boost::recursive_mutex::scoped_lock lock(inflation_access_);
     Costmap2D* master_costmap = layered_costmap_->getCostmap();
     resolution_ = master_costmap->getResolution();
-    // inflation_radius_ = layered_costmap_->getCircumscribedRadius();
-    inflation_radius_ = 0.1;
+    inflation_radius_ = layered_costmap_->getCircumscribedRadius();
+    // inflation_radius_ = 0.1;
     inscribed_radius_ = layered_costmap_->getInscribedRadius();
     cell_inflation_radius_ = cellDistance(inflation_radius_);
     computeCaches();
